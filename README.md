@@ -1,6 +1,8 @@
 Beancounter
 ==========
 
+[![license](http://img.shields.io/badge/license-apache_2.0-blue.svg?style=flat)](https://raw.githubusercontent.com/square/beancounter/master/LICENSE) [![travis](https://img.shields.io/travis/com/square/beancounter.svg?maxAge=3600&logo=travis&label=travis)](https://travis-ci.com/square/beancounter) [![report](https://goreportcard.com/badge/github.com/square/beancounter)](https://goreportcard.com/report/github.com/square/beancounter)
+
 Beancounter is a command line utility to audit the balance in cold and gateway wallets. The tool derives receive and
 change addresses for a given wallet and then connects to Electrum servers to fetch transactions and compute the final
 balance.
