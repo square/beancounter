@@ -7,6 +7,8 @@ Beancounter is a command line utility to audit the balance in cold and gateway w
 change addresses for a given wallet and then connects to Electrum servers to fetch transactions and compute the final
 balance.
 
+![logo](https://raw.githubusercontent.com/square/beancounter/master/coffee.jpg)
+
 Getting Started
 ===============
 
