@@ -23,6 +23,30 @@ type AddressDeriver struct {
 	account uint32
 }
 
+type Address struct {
+	path      string
+	addr      string
+	net       Network
+	change    uint32
+	addrIndex uint32
+}
+
+func (a *Address) Path() string {
+	return a.path
+}
+
+func (a *Address) String() string {
+	return a.addr
+}
+
+func (a *Address) Change() uint32 {
+	return a.change
+}
+
+func (a *Address) Index() uint32 {
+	return a.addrIndex
+}
+
 // NewAddressDeriver ...
 func NewAddressDeriver(network Network, xpubs []string, m int, account uint32) *AddressDeriver {
 	return &AddressDeriver{
@@ -34,11 +58,16 @@ func NewAddressDeriver(network Network, xpubs []string, m int, account uint32) *
 }
 
 // Derive ...
-func (d *AddressDeriver) Derive(change uint32, addressIndex uint32) string {
+func (d *AddressDeriver) Derive(change uint32, addressIndex uint32) *Address {
+
+	path := fmt.Sprintf("m/%s/%d/%d/%d", coinType(d.network), d.account, change, addressIndex)
+	addr := &Address{path: path, net: d.network, change: change, addrIndex: addressIndex}
 	if len(d.xpubs) == 1 {
-		return d.singleDerive(change, addressIndex)
+		addr.addr = d.singleDerive(change, addressIndex)
+		return addr
 	}
-	return d.multiSigSegwitDerive(change, addressIndex)
+	addr.addr = d.multiSigSegwitDerive(change, addressIndex)
+	return addr
 }
 
 func (d *AddressDeriver) singleDerive(change uint32, addressIndex uint32) string {
@@ -152,3 +181,17 @@ func (d *AddressDeriver) chainConfig() *chaincfg.Params {
 		panic("unreachable")
 	}
 }
+
+// as per SLIP-0044 https://github.com/satoshilabs/slips/blob/master/slip-0044.md
+func coinType(n Network) string {
+	switch n {
+	case Mainnet:
+		return "0'"
+	case Testnet:
+		return "1'"
+	default:
+		panic("unreachable")
+	}
+}
+
+//  p := fmt.Sprintf("m/%s/%d/%d/%d", coinType(net), *account, change, i)

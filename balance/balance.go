@@ -2,16 +2,21 @@ package balance
 
 import (
 	"time"
+
+	"github.com/square/beancounter/deriver"
 )
 
 // Checker is an interface wraps the Fetch method.
 // Checker fetches the balance information for an address.
 type Checker interface {
-	Fetch(addr string) (*Response, error)
+	Fetch(addr string) *Response
+	Subscribe(addrCh <-chan *deriver.Address) <-chan *Response
 }
 
 // Response wraps the balance and transaction information
 type Response struct {
+	Error        error
+	Address      *deriver.Address
 	Balance      uint64        `json:"balance"` // in Satoshi
 	Transactions []Transaction `json:"txrefs,omitempty"`
 }

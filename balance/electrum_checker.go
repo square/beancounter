@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 
 	"github.com/d4l3k/go-electrum/electrum"
+	"github.com/square/beancounter/deriver"
 )
 
 // ElectrumChecker wraps Electrum node and its API to provide a simple
@@ -27,15 +28,15 @@ func NewElectrumChecker(addr string) (*ElectrumChecker, error) {
 
 // Fetch queries connected node for address balance and transaction history and
 // returns Response.
-func (e *ElectrumChecker) Fetch(addr string) (*Response, error) {
+func (e *ElectrumChecker) Fetch(addr string) *Response {
 	b, err := e.node.BlockchainAddressGetBalance(addr)
 	if err != nil {
-		return nil, err
+		return &Response{Error: err}
 	}
 
 	txs, err := e.node.BlockchainAddressGetHistory(addr)
 	if err != nil {
-		return nil, err
+		return &Response{Error: err}
 	}
 
 	var transactions []Transaction
@@ -53,5 +54,19 @@ func (e *ElectrumChecker) Fetch(addr string) (*Response, error) {
 		Balance:      uint64(b.Confirmed),
 		Transactions: transactions,
 	}
-	return resp, nil
+	return resp
+}
+
+func (e *ElectrumChecker) Subscribe(addrCh <-chan *deriver.Address) <-chan *Response {
+	respCh := make(chan *Response, 100)
+	go func() {
+		for addr := range addrCh {
+			resp := e.Fetch(addr.String())
+			resp.Address = addr
+			respCh <- resp
+		}
+		close(respCh)
+	}()
+
+	return respCh
 }
