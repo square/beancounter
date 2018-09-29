@@ -2,6 +2,7 @@ package balance
 
 import (
 	"crypto/tls"
+	"sync"
 
 	"github.com/d4l3k/go-electrum/electrum"
 	"github.com/square/beancounter/deriver"
@@ -60,13 +61,24 @@ func (e *ElectrumChecker) Fetch(addr string) *Response {
 func (e *ElectrumChecker) Subscribe(addrCh <-chan *deriver.Address) <-chan *Response {
 	respCh := make(chan *Response, 100)
 	go func() {
+		var wg sync.WaitGroup
 		for addr := range addrCh {
-			resp := e.Fetch(addr.String())
-			resp.Address = addr
-			respCh <- resp
+			wg.Add(1)
+			// do not block on each Fetch API call
+			e.processFetch(addr, respCh, &wg)
 		}
+		// ensure that all addresses are processed and written to the output channel
+		// before closing it.
+		wg.Wait()
 		close(respCh)
 	}()
 
 	return respCh
+}
+
+func (e *ElectrumChecker) processFetch(addr *deriver.Address, out chan<- *Response, wg *sync.WaitGroup) {
+	resp := e.Fetch(addr.String())
+	resp.Address = addr
+	out <- resp
+	wg.Done()
 }
