@@ -3,9 +3,20 @@ Beancounter
 
 [![license](http://img.shields.io/badge/license-apache_2.0-blue.svg?style=flat)](https://raw.githubusercontent.com/square/beancounter/master/LICENSE) [![travis](https://img.shields.io/travis/com/square/beancounter.svg?maxAge=3600&logo=travis&label=travis)](https://travis-ci.com/square/beancounter) [![report](https://goreportcard.com/badge/github.com/square/beancounter)](https://goreportcard.com/report/github.com/square/beancounter)
 
-Beancounter is a command line utility to audit the balance in cold and gateway wallets. The tool derives receive and
-change addresses for a given wallet and then connects to Electrum servers to fetch transactions and compute the final
-balance.
+Beancounter is a command line utility to audit the balance of Hierarchical Deterministic (HD) wallets. The tool is
+designed to scale and work for wallets with a large number of addresses or transactions. The tool supports multiple
+types of wallets, including multisig + segwit.
+
+We picked Go as the programming language, because Go makes building the tool for different platforms trivial. We also
+appreciate the ability to distribute static binaries which don't have external dependencies.
+
+The process to determine a deterministic wallet's balance is relatively simple:
+1. Derive external (receive) and internal (change) addresses.
+2. Connect to Electrum servers and fetch balance information for single addresses.
+3. Sum the balances and repeat until there's a large number of unused addresses.
+
+Relying on Electrum servers has pros and cons. In a future version of this tool, we may offer an alternative source to
+query or compute balance information (such as connecting to a Bitcoin full node).
 
 ![logo](https://raw.githubusercontent.com/square/beancounter/master/coffee.jpg)
 
