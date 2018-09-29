@@ -13,6 +13,11 @@ import (
 	. "github.com/square/beancounter/utils"
 )
 
+// Beancounter is the main struct that can count the balance for a given wallet.
+// The main elements of Beancounter are checker and deriver. Deriver is used to
+// derive new addresses for a given config, and checker checks the balances and
+// transactions for each address.
+// Beancounter takes balances and transaction histories and tally them up.
 type Beancounter struct {
 	account      string
 	net          Network
@@ -38,7 +43,9 @@ type Beancounter struct {
 	receivedCh <-chan *balance.Response
 }
 
-func NewBalance(checker balance.Checker, drvr *deriver.AddressDeriver, lookahead uint32, sleep time.Duration) *Beancounter {
+// NewCounter instantiates the Beancounter
+// TODO: find a better way to pass options to the NewCounter. Maybe thru a config or functional option params?
+func NewCounter(checker balance.Checker, drvr *deriver.AddressDeriver, lookahead uint32, sleep time.Duration) *Beancounter {
 	b := &Beancounter{
 		checker:       checker,
 		deriver:       drvr,
@@ -51,6 +58,14 @@ func NewBalance(checker balance.Checker, drvr *deriver.AddressDeriver, lookahead
 	return b
 }
 
+// Count is Beancounters main function that derives the addresses and feeds them
+// into the checker.
+// The address derivation, address checking for balance and transactions, and the final
+// tally are all happening asynchronuously
+// NOTE: maybe add a reset step so that Beancounter struct can be reused
+//       or Count can be called multiple time?
+//       The other option is for Count to return a result struct instead of mutating
+//       Beancounter struct.
 func (b *Beancounter) Count() {
 	b.wg.Add(1)
 	go b.sendWork()
@@ -58,19 +73,20 @@ func (b *Beancounter) Count() {
 	b.wg.Wait()
 }
 
+// sendWork starts the send loop that derives new addresses and sends them to a
+// a checker.
+// Addresses are derived in batches (up to a `lookahead` index) and the range can
+// be extended if a transaction for a given address is found. E.g.:
+// only addresses 0-99 are supposed to be checked, but there was a transaction at
+// index 43, so now the last address to be checked should be 142.
 func (b *Beancounter) sendWork() {
 	indexes := []uint32{0, 0}
 	for {
 		for _, change := range []uint32{0, 1} {
-			//fmt.Println("[sendWork] ABOUT TO START WORK")
-			lastAddr := b.getLastAddress(change)
-			for i := indexes[change]; i < lastAddr; i++ {
-				//fmt.Println("[sendWork] BEFORE THE LOCK")
+			for i := indexes[change]; i < b.getLastAddress(change); i++ {
 				b.countMu.Lock()
-				//fmt.Println("[sendWork] INSIDE THE LOCK")
 				b.derivedCount++
 				b.countMu.Unlock()
-				//fmt.Println("[sendWork] AFTER THE LOCK")
 
 				// schedule work for checker
 				b.checkerCh <- b.deriver.Derive(change, i)
@@ -84,35 +100,33 @@ func (b *Beancounter) sendWork() {
 	}
 }
 
+// getLastAddress synchronizes access to lastAddresses array
 func (b *Beancounter) getLastAddress(change uint32) uint32 {
-	//fmt.Println("[getLastAddress] BEFORE THE LOCK")
 	b.countMu.Lock()
-	//fmt.Println("[getLastAddress] INSIDE THE LOCK")
-	v := b.lastAddresses[change]
-	b.countMu.Unlock()
-	//fmt.Println("[getLastAddress] AFTER THE LOCK")
+	defer b.countMu.Unlock()
 
-	return v
+	return b.lastAddresses[change]
 }
 
+// receiveWork starts a receive work loop and then waits for others parts of
+// Beancounter to finish
 func (b *Beancounter) receiveWork() {
 	b.receiveWorkLoop()
-	//fmt.Println("DONE and waiting for workgroup")
 	b.wg.Done()
 }
 
+// receiveWorkLoop encapsulates the receive loop that continues to processing
+// responses until complete() returns true.
 func (b *Beancounter) receiveWorkLoop() {
 	for {
 		select {
 		case resp := <-b.receivedCh:
-			//fmt.Println("[receiveWorkLoop] BEFORE THE LOCK")
 			b.countMu.Lock()
-			//fmt.Println("[receiveWorkLoop] INSIDE THE LOCK")
 			b.checkedCount++
 			b.countMu.Unlock()
-			//fmt.Println("[receiveWorkLoop] AFTER THE LOCK")
+
 			if resp != nil {
-				b.AddBalance(resp)
+				b.addBalance(resp)
 
 				fmt.Printf("Checking balance for %s %s ... ", resp.Address.Path(), resp.Address.String())
 				if resp.HasTransactions() {
@@ -121,28 +135,25 @@ func (b *Beancounter) receiveWorkLoop() {
 					fmt.Printf("∅\n")
 				}
 			} else {
-				//fmt.Println("SOMETHING IS OFF")
 			}
 		default:
 			// no work check if we're done
-			if b.Complete() {
+			if b.complete() {
 				return
 			}
 		}
 	}
 }
 
-func (b *Beancounter) Complete() bool {
-	//fmt.Println("[Complete] BEFORE THE LOCK")
+// complete checks if all addresses have been derived and checked.
+// Since most of the work happens asynchronuously, there needs to be a termination
+// condition.
+func (b *Beancounter) complete() bool {
 	b.countMu.Lock()
-	//fmt.Println("[Complete] INSIDE THE LOCK")
+	defer b.countMu.Unlock()
 
 	indexes := b.lastAddresses[0] + b.lastAddresses[1]
-	////fmt.Printf("Derived: %d, checked: %d, lastAddresses[0]: %d, lastAddresses[1]: %d\n", b.derivedCount, b.checkedCount, b.lastAddresses[0], b.lastAddresses[1])
-	check := b.derivedCount == indexes && b.checkedCount == indexes
-	b.countMu.Unlock()
-	//fmt.Println("[Complete] AFTER THE LOCK")
-	return check
+	return b.derivedCount == indexes && b.checkedCount == indexes
 }
 
 type addrBalance struct {
@@ -173,6 +184,9 @@ func (t *transaction) toArray() []string {
 	return []string{t.path, t.addr, t.hash}
 }
 
+// WriteTransactions prints to STDOUT every transaction for each address scanned.
+// TODO: Move it to some output formatter/writer. Beancounter shouldn't care what
+//       happens with data after it has been computed.
 func (b *Beancounter) WriteTransactions() {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"Path", "Address", "Transaction Hash"})
@@ -184,6 +198,10 @@ func (b *Beancounter) WriteTransactions() {
 	fmt.Printf("\n")
 }
 
+// WriteSummary prints a summary table with total balance and the range of
+// addresses scanned to the STDOUT.
+// TODO: Move it to some output formatter/writer. Beancounter shouldn't care what
+//       happens with data after it has been computed.
 func (b *Beancounter) WriteSummary() {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"Total Balance", "Last Receive Index", "Last Change Index", "Report Time"})
@@ -197,6 +215,9 @@ func (b *Beancounter) WriteSummary() {
 	fmt.Printf("\n")
 }
 
+// WriteBalances prints to STDOUT every non-zero balance for each address scanned.
+// TODO: Move it to some output formatter/writer. Beancounter shouldn't care what
+//       happens with data after it has been computed.
 func (b *Beancounter) WriteBalances() {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"Path", "Address", "Balance"})
@@ -208,7 +229,9 @@ func (b *Beancounter) WriteBalances() {
 	fmt.Printf("\n")
 }
 
-func (b *Beancounter) AddBalance(r *balance.Response) {
+// addBalance update the total balance and list of transactions for each Response
+// from the checker.
+func (b *Beancounter) addBalance(r *balance.Response) {
 	b.totalBalance += r.Balance
 	if r.HasTransactions() {
 		// move lookahead since we found a transaction

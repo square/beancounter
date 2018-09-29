@@ -15,7 +15,10 @@ import (
 	. "github.com/square/beancounter/utils"
 )
 
-// AddressDeriver ...
+// AddressDeriver is a struct that contains necessary information to derive
+// an address from a given extended public key (or list of public keys).
+// It follows the conventions as written in BIP32
+// // https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#serialization-format
 type AddressDeriver struct {
 	network Network
 	xpubs   []string
@@ -23,6 +26,9 @@ type AddressDeriver struct {
 	account uint32
 }
 
+// Address wraps a simple wallet address.
+// It contains information such as network type (e.g. mainnet or testnet), derivation
+// path (e.g. m/0/0/123/50), change value and address index.
 type Address struct {
 	path      string
 	addr      string
@@ -31,23 +37,27 @@ type Address struct {
 	addrIndex uint32
 }
 
+// Path returns derivation path
 func (a *Address) Path() string {
 	return a.path
 }
 
+// String returns the address as string
 func (a *Address) String() string {
 	return a.addr
 }
 
+// Change returns the change value (so 0 or 1)
 func (a *Address) Change() uint32 {
 	return a.change
 }
 
+// Index returns the address index
 func (a *Address) Index() uint32 {
 	return a.addrIndex
 }
 
-// NewAddressDeriver ...
+// NewAddressDeriver returns a new instance of AddressDeriver
 func NewAddressDeriver(network Network, xpubs []string, m int, account uint32) *AddressDeriver {
 	return &AddressDeriver{
 		network: network,
@@ -57,7 +67,8 @@ func NewAddressDeriver(network Network, xpubs []string, m int, account uint32) *
 	}
 }
 
-// Derive ...
+// Derive dervives an address for given change and address index.
+// It supports derivation using single extended public key and multisig + segwit.
 func (d *AddressDeriver) Derive(change uint32, addressIndex uint32) *Address {
 
 	path := fmt.Sprintf("m/%s/%d/%d/%d", coinType(d.network), d.account, change, addressIndex)
@@ -70,6 +81,7 @@ func (d *AddressDeriver) Derive(change uint32, addressIndex uint32) *Address {
 	return addr
 }
 
+// singleDerive performs a derivation using a single extended public key
 func (d *AddressDeriver) singleDerive(change uint32, addressIndex uint32) string {
 	key, err := hdkeychain.NewKeyFromString(d.xpubs[0])
 	PanicOnError(err)
@@ -89,6 +101,7 @@ func (d *AddressDeriver) singleDerive(change uint32, addressIndex uint32) string
 	return pubKey.String()
 }
 
+// multiSigSegwitDerive performs a multisig + segwit derivation.
 func (d *AddressDeriver) multiSigSegwitDerive(change uint32, addressIndex uint32) string {
 	pubKeysBytes := make([][]byte, 0, len(d.xpubs))
 	pubKeys := make([]*btcutil.AddressPubKey, 0, len(d.xpubs))
@@ -115,6 +128,7 @@ func (d *AddressDeriver) multiSigSegwitDerive(change uint32, addressIndex uint32
 		}
 
 		pubKeysBytes = append(pubKeysBytes, pubKeyBytes)
+
 		sortByteArrays(pubKeysBytes)
 	}
 
@@ -171,6 +185,7 @@ func sortByteArrays(src [][]byte) [][]byte {
 	return sorted
 }
 
+// chainConfig returns a given chaincfg.Params for a given Network
 func (d *AddressDeriver) chainConfig() *chaincfg.Params {
 	switch d.network {
 	case Mainnet:
@@ -193,5 +208,3 @@ func coinType(n Network) string {
 		panic("unreachable")
 	}
 }
-
-//  p := fmt.Sprintf("m/%s/%d/%d/%d", coinType(net), *account, change, i)

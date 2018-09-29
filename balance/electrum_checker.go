@@ -58,6 +58,13 @@ func (e *ElectrumChecker) Fetch(addr string) *Response {
 	return resp
 }
 
+// Subscribe provides a bidirectional streaming of checks for addresses.
+// It takes a channel of addresses and returns a channel of responses, to which
+// it is writing asynchronuously.
+// TODO: Looks like Subscribe implementation is separate from implementation
+//       details of each checker and therefore could be abstracted into a separate
+//       struct/interface (e.g. there could be a StreamingChecker interface that
+//       implements Subcribe method).
 func (e *ElectrumChecker) Subscribe(addrCh <-chan *deriver.Address) <-chan *Response {
 	respCh := make(chan *Response, 100)
 	go func() {
@@ -76,6 +83,8 @@ func (e *ElectrumChecker) Subscribe(addrCh <-chan *deriver.Address) <-chan *Resp
 	return respCh
 }
 
+// processFetch fetches the data for an address, sends the response to the outgoing
+// channel and marks itself as done in the shared WorkGroup
 func (e *ElectrumChecker) processFetch(addr *deriver.Address, out chan<- *Response, wg *sync.WaitGroup) {
 	resp := e.Fetch(addr.String())
 	resp.Address = addr

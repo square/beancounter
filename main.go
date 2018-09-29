@@ -69,7 +69,7 @@ func main() {
 	checker, err := balance.NewElectrumChecker(getServer())
 	PanicOnError(err)
 
-	tb := beancounter.NewBalance(checker, deriver, *lookahead, *sleep)
+	tb := beancounter.NewCounter(checker, deriver, *lookahead, *sleep)
 
 	tb.Count()
 

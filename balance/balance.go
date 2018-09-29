@@ -6,8 +6,10 @@ import (
 	"github.com/square/beancounter/deriver"
 )
 
-// Checker is an interface wraps the Fetch method.
+// Checker is an interface that wraps the Fetch method.
 // Checker fetches the balance information for an address.
+// It provides a simple Fetch API to check a single address and a Subscribe API
+// for continuous check of of address stream.
 type Checker interface {
 	Fetch(addr string) *Response
 	Subscribe(addrCh <-chan *deriver.Address) <-chan *Response
