@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 
@@ -24,6 +25,7 @@ var (
 	sleep     = kingpin.Flag("sleep", "sleep between requests to avoid API rate-limit").Default("1s").Duration()
 	addr      = kingpin.Flag("addr", "Electrum server").PlaceHolder("HOST:PORT").TCP()
 	debug     = kingpin.Flag("debug", "debug output").Default("false").Bool()
+	find_addr = kingpin.Flag("find", "finds the offset of an address").String()
 )
 
 const (
@@ -62,6 +64,24 @@ func main() {
 
 	net := Network(*network)
 	deriver := deriver.NewAddressDeriver(net, xpubs, *m, *account)
+
+	if *find_addr != "" {
+		fmt.Printf("Searching for %s\n", *find_addr)
+		for i := uint32(0); i < math.MaxUint32; i++ {
+			for _, change := range []uint32{0, 1} {
+				addr := deriver.Derive(change, i)
+				if addr.String() == *find_addr {
+					fmt.Printf("found: %s %s\n", addr.Path(), addr)
+					return
+				}
+				if i%1000 == 0 {
+					fmt.Printf("reached: %s %s\n", addr.Path(), addr)
+				}
+			}
+		}
+		fmt.Printf("not found\n")
+		return
+	}
 
 	// NOTE: maybe allow to query various services like BlockCypher etc. based on
 	//       CLI options
