@@ -7,6 +7,16 @@ func PanicOnError(err error) {
 	}
 }
 
+func Max(num uint32, nums ...uint32) uint32 {
+	r := num
+	for _, v := range nums {
+		if v > r {
+			r = v
+		}
+	}
+	return r
+}
+
 type Network string
 
 const (

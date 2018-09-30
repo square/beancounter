@@ -31,6 +31,7 @@ type Beancounter struct {
 	checker   balance.Checker
 	deriver   *deriver.AddressDeriver
 	lookahead uint32
+	start     uint32
 	sleep     time.Duration
 	wg        sync.WaitGroup
 
@@ -45,13 +46,14 @@ type Beancounter struct {
 
 // NewCounter instantiates the Beancounter
 // TODO: find a better way to pass options to the NewCounter. Maybe thru a config or functional option params?
-func NewCounter(checker balance.Checker, drvr *deriver.AddressDeriver, lookahead uint32, sleep time.Duration) *Beancounter {
+func NewCounter(checker balance.Checker, drvr *deriver.AddressDeriver, lookahead, start uint32, sleep time.Duration) *Beancounter {
 	b := &Beancounter{
 		checker:       checker,
 		deriver:       drvr,
 		lookahead:     lookahead,
+		start:         start,
 		sleep:         sleep,
-		lastAddresses: [2]uint32{lookahead, lookahead},
+		lastAddresses: [2]uint32{start + lookahead, start + lookahead},
 		checkerCh:     make(chan *deriver.Address, 100),
 	}
 	b.receivedCh = b.checker.Subscribe(b.checkerCh)
@@ -80,7 +82,7 @@ func (b *Beancounter) Count() {
 // only addresses 0-99 are supposed to be checked, but there was a transaction at
 // index 43, so now the last address to be checked should be 142.
 func (b *Beancounter) sendWork() {
-	indexes := []uint32{0, 0}
+	indexes := []uint32{b.start, b.start}
 	for {
 		for _, change := range []uint32{0, 1} {
 			for i := indexes[change]; i < b.getLastAddress(change); i++ {
@@ -236,7 +238,7 @@ func (b *Beancounter) addBalance(r *balance.Response) {
 	if r.HasTransactions() {
 		// move lookahead since we found a transaction
 		b.countMu.Lock()
-		b.lastAddresses[r.Address.Change()] = r.Address.Index() + b.lookahead
+		b.lastAddresses[r.Address.Change()] = Max(b.lastAddresses[r.Address.Change()], r.Address.Index()+b.lookahead)
 		b.countMu.Unlock()
 		b.balances = append(b.balances, addrBalance{path: r.Address.Path(), addr: r.Address.String(), balance: r.Balance})
 

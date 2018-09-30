@@ -22,6 +22,7 @@ var (
 	account   = kingpin.Flag("account", "account number").Required().Uint32()
 	network   = kingpin.Flag("network", "'mainnet' or 'testnet'").Default("mainnet").Enum("mainnet", "testnet")
 	lookahead = kingpin.Flag("lookahead", "lookahead size").Default("100").Uint32()
+	start     = kingpin.Flag("start", "index to start at").Default("0").Uint32()
 	sleep     = kingpin.Flag("sleep", "sleep between requests to avoid API rate-limit").Default("1s").Duration()
 	addr      = kingpin.Flag("addr", "Electrum server").PlaceHolder("HOST:PORT").TCP()
 	debug     = kingpin.Flag("debug", "debug output").Default("false").Bool()
@@ -88,7 +89,7 @@ func main() {
 	checker, err := balance.NewElectrumChecker(getServer())
 	PanicOnError(err)
 
-	tb := beancounter.NewCounter(checker, deriver, *lookahead, *sleep)
+	tb := beancounter.NewCounter(checker, deriver, *lookahead, *start, *sleep)
 
 	tb.Count()
 
