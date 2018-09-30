@@ -15,7 +15,7 @@ func TestDeriveMultiSigSegwit(t *testing.T) {
 		"tpubD8GrNWdYHDjdJryH5tng8LUzHSrEo4gToaguKnzthEqTxyfF13jTsp4sMtmso4n1VC58R5Wvt4Ua4npZTecR1xaGGYJgLLQj5sQGdD2xh2N",
 	}
 	deriver := NewAddressDeriver(Testnet, xpubs, 2, 0)
-	assert.Equal(t, "2N4TmnHspa8wqFEUfxfjzHoSUAgwoUwNWhr", deriver.Derive(0, 0))
+	assert.Equal(t, "2N4TmnHspa8wqFEUfxfjzHoSUAgwoUwNWhr", deriver.Derive(0, 0).String())
 }
 
 func TestDeriveGateway(t *testing.T) {
@@ -23,6 +23,6 @@ func TestDeriveGateway(t *testing.T) {
 		"tpubD8L6UhrL8ML9Ao47k4pmdvUoiA6QUJVzrJ9BXLgU9idRKnvdRFGgjcxmVxojWGvCcjMi6QWCp8uMpCwWdSFRDNJ7utizxLy27sVWXQT4Jz7",
 	}
 	deriver := NewAddressDeriver(Testnet, xpubs, 1, 1234)
-	assert.Equal(t, "mzoeuyGqMudyvKbkNx5dtNBNN59oKEAsPn", deriver.Derive(0, 0))
-	assert.Equal(t, "moHN13u4RoMxujdaPxvuaTaawgWZ3LaGyo", deriver.Derive(1, 0))
+	assert.Equal(t, "mzoeuyGqMudyvKbkNx5dtNBNN59oKEAsPn", deriver.Derive(0, 0).String())
+	assert.Equal(t, "moHN13u4RoMxujdaPxvuaTaawgWZ3LaGyo", deriver.Derive(1, 0).String())
 }
