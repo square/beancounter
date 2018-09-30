@@ -51,7 +51,7 @@ func main() {
 	}
 
 	if *n > 20 {
-		panic(fmt.Sprintf("n cannot be greater han 20 (got %d)", *n))
+		panic(fmt.Sprintf("n cannot be greater than 20 (got %d)", *n))
 	}
 
 	xpubs := make([]string, 0, *n)

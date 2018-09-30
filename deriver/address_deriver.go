@@ -86,7 +86,7 @@ func (d *AddressDeriver) singleDerive(change uint32, addressIndex uint32) string
 	key, err := hdkeychain.NewKeyFromString(d.xpubs[0])
 	PanicOnError(err)
 
-	if (d.account != 4294967295) {
+	if d.account != 4294967295 {
 		key, err = key.Child(d.account)
 		PanicOnError(err)
 	}

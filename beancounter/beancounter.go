@@ -2,6 +2,7 @@ package beancounter
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"sync"
@@ -35,7 +36,7 @@ type Beancounter struct {
 	sleep     time.Duration
 	wg        sync.WaitGroup
 
-	countMu       sync.Mutex
+	countMu       sync.Mutex // protects lastAddresses, derivedCount and checkedCount
 	lastAddresses [2]uint32
 	derivedCount  uint32
 	checkedCount  uint32
@@ -137,12 +138,17 @@ func (b *Beancounter) receiveWorkLoop() {
 					fmt.Printf("∅\n")
 				}
 			} else {
+				log.Printf("resp is nil\n")
 			}
 		default:
 			// no work check if we're done
 			if b.complete() {
 				return
 			}
+
+			// TODO: the select should probably be removed so that the receive is blocking. We will then not need the sleep
+			// to avoid looping around b.complete() while waiting for network responses.
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
 }
@@ -154,7 +160,8 @@ func (b *Beancounter) complete() bool {
 	b.countMu.Lock()
 	defer b.countMu.Unlock()
 
-	indexes := b.lastAddresses[0] + b.lastAddresses[1]
+	// We are done when the right number of addresses were scheduled, fetched and processed
+	indexes := (b.lastAddresses[0] - b.start) + (b.lastAddresses[1] - b.start)
 	return b.derivedCount == indexes && b.checkedCount == indexes
 }
 
