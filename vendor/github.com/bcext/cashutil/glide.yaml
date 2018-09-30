@@ -1,0 +1,20 @@
+package: github.com/bcext/cashutil
+import:
+- package: github.com/aead/siphash
+- package: github.com/bcext/gcash
+  version: 067de8b6c8108fb5df47ccbea453b0c6e727d5ba
+  subpackages:
+  - blockchain
+  - btcec
+  - chaincfg
+  - chaincfg/chainhash
+  - txscript
+  - wire
+- package: github.com/kkdai/bstream
+- package: golang.org/x/crypto
+  subpackages:
+  - ripemd160
+testImport:
+- package: github.com/davecgh/go-spew
+  subpackages:
+  - spew

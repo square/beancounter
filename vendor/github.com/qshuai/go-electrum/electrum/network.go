@@ -4,19 +4,19 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
-const (
-	ClientVersion   = "0.0.1"
-	ProtocolVersion = "1.0"
-)
+const delim = byte('\n')
 
 var (
 	ErrNotImplemented = errors.New("not implemented")
 	ErrNodeConnected  = errors.New("node already connected")
+	ErrNodeShutdown   = errors.New("node has shutdown")
+	ErrTimeout        = errors.New("request timeout")
 )
 
 type Transport interface {
@@ -26,15 +26,20 @@ type Transport interface {
 }
 
 type respMetadata struct {
-	Id     int    `json:"id"`
-	Method string `json:"method"`
-	Error  string `json:"error"`
+	Id     uint64  `json:"id"`
+	Method string  `json:"method"`
+	Error  *APIErr `json:"error"`
+}
+
+type APIErr struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
 }
 
 type request struct {
-	Id     int      `json:"id"`
-	Method string   `json:"method"`
-	Params []string `json:"params"`
+	Id     uint64        `json:"id"`
+	Method string        `json:"method"`
+	Params []interface{} `json:"params"`
 }
 
 type basicResp struct {
@@ -42,24 +47,34 @@ type basicResp struct {
 }
 
 type Node struct {
-	Address string
+	transport Transport
 
-	transport    Transport
-	handlers     map[int]chan []byte
 	handlersLock sync.RWMutex
+	handlers     map[uint64]chan []byte
 
-	pushHandlers     map[string][]chan []byte
 	pushHandlersLock sync.RWMutex
+	pushHandlers     map[string][]chan []byte
 
-	nextId int
+	Error chan error
+	quit  chan struct{}
+
+	// nextId tags a request, and get the same id from server result.
+	// Should be atomic operation for concurrence.
+	// notice the max request limit, if reach to the max times,
+	// 0 will be the next id. Assume the oldest has been deal completely.
+	nextId uint64
 }
 
 // NewNode creates a new node.
 func NewNode() *Node {
 	n := &Node{
-		handlers:     make(map[int]chan []byte),
+		handlers:     make(map[uint64]chan []byte),
 		pushHandlers: make(map[string][]chan []byte),
+
+		Error: make(chan error),
+		quit:  make(chan struct{}),
 	}
+
 	return n
 }
 
@@ -68,7 +83,7 @@ func (n *Node) ConnectTCP(addr string) error {
 	if n.transport != nil {
 		return ErrNodeConnected
 	}
-	n.Address = addr
+
 	transport, err := NewTCPTransport(addr)
 	if err != nil {
 		return err
@@ -83,7 +98,6 @@ func (n *Node) ConnectSSL(addr string, config *tls.Config) error {
 	if n.transport != nil {
 		return ErrNodeConnected
 	}
-	n.Address = addr
 	transport, err := NewSSLTransport(addr, config)
 	if err != nil {
 		return err
@@ -93,29 +107,27 @@ func (n *Node) ConnectSSL(addr string, config *tls.Config) error {
 	return nil
 }
 
-// err handles errors produced by the foreign node.
-func (n *Node) err(err error) {
-	// TODO (d4l3k) Better error handling.
-	log.Fatal(err)
-}
-
 // listen processes messages from the server.
 func (n *Node) listen() {
 	for {
 		select {
 		case err := <-n.transport.Errors():
-			n.err(err)
-			return
+			n.Error <- err
+			n.shutdown()
 		case bytes := <-n.transport.Responses():
 			msg := &respMetadata{}
-			if err := json.Unmarshal(bytes, msg); err != nil {
-				n.err(err)
-				return
+			if err := json.Unmarshal(bytes, msg); err != nil && DebugMode {
+				log.Printf("unmarshal received message failed: %v", err)
 			}
-			if len(msg.Error) > 0 {
-				n.err(fmt.Errorf("error from server: %#v", msg.Error))
-				return
+
+			// 1. method or params error;
+			// 2. server handle error;
+			// Caller should handle with this error
+			if msg.Error != nil && DebugMode {
+				log.Printf("errors returned from electrum server: %v", msg.Error)
 			}
+
+			// subscribe message if returned message with 'method' field
 			if len(msg.Method) > 0 {
 				n.pushHandlersLock.RLock()
 				handlers := n.pushHandlers[msg.Method]
@@ -150,13 +162,19 @@ func (n *Node) listenPush(method string) <-chan []byte {
 }
 
 // request makes a request to the server and unmarshals the response into v.
-func (n *Node) request(method string, params []string, v interface{}) error {
+func (n *Node) request(method string, params []interface{}, v interface{}) error {
+	select {
+	case <-n.quit:
+		return ErrNodeShutdown
+	default:
+	}
+
 	msg := request{
-		Id:     n.nextId,
+		Id:     atomic.LoadUint64(&n.nextId),
 		Method: method,
 		Params: params,
 	}
-	n.nextId++
+	atomic.AddUint64(&n.nextId, 1)
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -172,14 +190,30 @@ func (n *Node) request(method string, params []string, v interface{}) error {
 	n.handlers[msg.Id] = c
 	n.handlersLock.Unlock()
 
-	resp := <-c
+	var resp []byte
+	select {
+	case resp = <-c:
+	case <-time.After(5 * time.Second):
+		return ErrTimeout
+	}
 
 	n.handlersLock.Lock()
 	defer n.handlersLock.Unlock()
 	delete(n.handlers, msg.Id)
 
-	if err := json.Unmarshal(resp, v); err != nil {
-		return nil
+	if v != nil {
+		if err := json.Unmarshal(resp, v); err != nil {
+			return err
+		}
 	}
+
 	return nil
+}
+
+func (n *Node) shutdown() {
+	close(n.quit)
+
+	n.transport = nil
+	n.handlers = nil
+	n.pushHandlers = nil
 }
