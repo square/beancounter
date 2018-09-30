@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 	"sync"
 
-	"github.com/d4l3k/go-electrum/electrum"
+	"github.com/qshuai/go-electrum/electrum"
 	"github.com/square/beancounter/deriver"
 )
 

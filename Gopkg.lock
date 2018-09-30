@@ -22,6 +22,30 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:8fb98751767266ff75137a2c5e409f908b32dadfaa313e3f351f92f2fb1cc2a0"
+  name = "github.com/bcext/cashutil"
+  packages = [
+    ".",
+    "base58",
+  ]
+  pruneopts = "UT"
+  revision = "9ba6cf2922836010e02658df743533b995b0d947"
+
+[[projects]]
+  branch = "master"
+  digest = "1:cb6617750a078f565677c63823afde537cd8ece05579ec2d4c570ad4d70667ec"
+  name = "github.com/bcext/gcash"
+  packages = [
+    "btcec",
+    "chaincfg",
+    "chaincfg/chainhash",
+    "wire",
+  ]
+  pruneopts = "UT"
+  revision = "3f4b5649304748eaad05bc08e6e4a5f87029fd39"
+
+[[projects]]
+  branch = "master"
   digest = "1:921cf222e0ea2ac9107d4daf92e671d4d3979c227839d60c58275fb5453d2599"
   name = "github.com/btcsuite/btcd"
   packages = [
@@ -56,14 +80,6 @@
   revision = "ab6388e0c60ae4834a1f57511e20c17b5f78be4b"
 
 [[projects]]
-  branch = "master"
-  digest = "1:d212a46cecbc332819aa5d6e524c727df7887a3b8a6e6a1e7c25f0e27267bbde"
-  name = "github.com/d4l3k/go-electrum"
-  packages = ["electrum"]
-  pruneopts = "UT"
-  revision = "65385de82759ba08844f8cc50e94aaf05a0ed59c"
-
-[[projects]]
   digest = "1:ffe9824d294da03b391f44e1ae8281281b4afc1bdaa9588c9097785e3af10cec"
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
@@ -96,6 +112,14 @@
   version = "v1.0.0"
 
 [[projects]]
+  branch = "master"
+  digest = "1:b870a4d34137fdeeebe17448f3dc5bd505ba6091a0dfbf086d9934336a9ea2b2"
+  name = "github.com/qshuai/go-electrum"
+  packages = ["electrum"]
+  pruneopts = "UT"
+  revision = "970805057ff878a0ba0aa55aa9f72d6e96295a60"
+
+[[projects]]
   digest = "1:18752d0b95816a1b777505a97f71c7467a8445b8ffb55631a7bf779f6ba4fa83"
   name = "github.com/stretchr/testify"
   packages = ["assert"]
@@ -109,7 +133,7 @@
   name = "golang.org/x/crypto"
   packages = ["ripemd160"]
   pruneopts = "UT"
-  revision = "0e37d006457bf46f9e6692014ba72ef82c33022c"
+  revision = "5295e8364332db77d75fce11f1d19c053919a9c9"
 
 [[projects]]
   digest = "1:c06d9e11d955af78ac3bbb26bd02e01d2f61f689e1a3bce2ef6fb683ef8a7f2d"
@@ -127,8 +151,8 @@
     "github.com/btcsuite/btcd/txscript",
     "github.com/btcsuite/btcutil",
     "github.com/btcsuite/btcutil/hdkeychain",
-    "github.com/d4l3k/go-electrum/electrum",
     "github.com/olekukonko/tablewriter",
+    "github.com/qshuai/go-electrum/electrum",
     "github.com/stretchr/testify/assert",
     "gopkg.in/alecthomas/kingpin.v2",
   ]

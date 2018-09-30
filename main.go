@@ -3,13 +3,12 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"io/ioutil"
-	"log"
 	"os"
 	"strings"
 
 	"gopkg.in/alecthomas/kingpin.v2"
 
+	"github.com/qshuai/go-electrum/electrum"
 	"github.com/square/beancounter/balance"
 	"github.com/square/beancounter/beancounter"
 	"github.com/square/beancounter/deriver"
@@ -36,8 +35,8 @@ func main() {
 	kingpin.Version("0.0.2")
 	kingpin.Parse()
 
-	if !*debug {
-		log.SetOutput(ioutil.Discard)
+	if *debug {
+		electrum.DebugMode = true
 	}
 
 	if *m <= 0 {
