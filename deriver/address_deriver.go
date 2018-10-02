@@ -7,7 +7,6 @@ import (
 	"log"
 	"sort"
 
-	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcutil"
 	"github.com/btcsuite/btcutil/hdkeychain"
@@ -97,7 +96,7 @@ func (d *AddressDeriver) singleDerive(change uint32, addressIndex uint32) string
 	key, err = key.Child(addressIndex)
 	PanicOnError(err)
 
-	pubKey, err := key.Address(d.chainConfig())
+	pubKey, err := key.Address(d.network.ChainConfig())
 	PanicOnError(err)
 
 	return pubKey.String()
@@ -135,7 +134,7 @@ func (d *AddressDeriver) multiSigSegwitDerive(change uint32, addressIndex uint32
 	}
 
 	for _, pubKeyBytes := range pubKeysBytes {
-		key, err := btcutil.NewAddressPubKey(pubKeyBytes, d.chainConfig())
+		key, err := btcutil.NewAddressPubKey(pubKeyBytes, d.network.ChainConfig())
 		PanicOnError(err)
 		pubKeys = append(pubKeys, key)
 	}
@@ -151,7 +150,7 @@ func (d *AddressDeriver) multiSigSegwitDerive(change uint32, addressIndex uint32
 	segWitScript, err := segWitScriptBuilder.Script()
 	PanicOnError(err)
 
-	addrScriptHash, err := btcutil.NewAddressScriptHash(segWitScript, d.chainConfig())
+	addrScriptHash, err := btcutil.NewAddressScriptHash(segWitScript, d.network.ChainConfig())
 	PanicOnError(err)
 
 	return addrScriptHash.EncodeAddress()
@@ -185,18 +184,6 @@ func sortByteArrays(src [][]byte) [][]byte {
 	sorted := sortedByteArrays(src)
 	sort.Sort(sorted)
 	return sorted
-}
-
-// chainConfig returns a given chaincfg.Params for a given Network
-func (d *AddressDeriver) chainConfig() *chaincfg.Params {
-	switch d.network {
-	case Mainnet:
-		return &chaincfg.MainNetParams
-	case Testnet:
-		return &chaincfg.TestNet3Params
-	default:
-		panic("unreachable")
-	}
 }
 
 // as per SLIP-0044 https://github.com/satoshilabs/slips/blob/master/slip-0044.md

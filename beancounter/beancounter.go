@@ -128,7 +128,7 @@ func (b *Beancounter) receiveWorkLoop() {
 			b.checkedCount++
 			b.countMu.Unlock()
 
-			if resp != nil {
+			if resp != nil && resp.Error == nil {
 				b.addBalance(resp)
 
 				fmt.Printf("Checking balance for %s %s ... ", resp.Address.Path(), resp.Address.String())
@@ -137,6 +137,8 @@ func (b *Beancounter) receiveWorkLoop() {
 				} else {
 					fmt.Printf("∅\n")
 				}
+			} else if resp != nil {
+				log.Printf("[RESP ERROR]: %s:  %s\n", resp.Address.String(), resp.Error.Error())
 			} else {
 				log.Printf("resp is nil\n")
 			}

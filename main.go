@@ -17,16 +17,19 @@ import (
 )
 
 var (
-	m         = kingpin.Flag("m", "number of signatures (quorum)").Short('m').Required().Int()
-	n         = kingpin.Flag("n", "number of public keys").Short('n').Required().Int()
-	account   = kingpin.Flag("account", "account number").Required().Uint32()
-	network   = kingpin.Flag("network", "'mainnet' or 'testnet'").Default("mainnet").Enum("mainnet", "testnet")
-	lookahead = kingpin.Flag("lookahead", "lookahead size").Default("100").Uint32()
-	start     = kingpin.Flag("start", "index to start at").Default("0").Uint32()
-	sleep     = kingpin.Flag("sleep", "sleep between requests to avoid API rate-limit").Default("1s").Duration()
-	addr      = kingpin.Flag("addr", "Electrum server").PlaceHolder("HOST:PORT").TCP()
-	debug     = kingpin.Flag("debug", "debug output").Default("false").Bool()
-	find_addr = kingpin.Flag("find", "finds the offset of an address").String()
+	m              = kingpin.Flag("m", "number of signatures (quorum)").Short('m').Required().Int()
+	n              = kingpin.Flag("n", "number of public keys").Short('n').Required().Int()
+	account        = kingpin.Flag("account", "account number").Required().Uint32()
+	network        = kingpin.Flag("network", "'mainnet' or 'testnet'").Default("mainnet").Enum("mainnet", "testnet")
+	backend        = kingpin.Flag("backend", "Personal Btcd or public Electrum nodes").Default("electrum").Enum("electrum", "btcd")
+	lookahead      = kingpin.Flag("lookahead", "lookahead size").Default("100").Uint32()
+	sleep          = kingpin.Flag("sleep", "sleep between requests to avoid API rate-limit").Default("1s").Duration()
+	addr           = kingpin.Flag("addr", "Electrum or btcd server").PlaceHolder("HOST:PORT").TCP()
+	rpcuser        = kingpin.Flag("rpcuser", "RPC username").PlaceHolder("USER").String()
+	rpcpass        = kingpin.Flag("rpcpass", "RPC password").PlaceHolder("PASSWORD").String()
+	debug          = kingpin.Flag("debug", "debug output").Default("false").Bool()
+	findAddr       = kingpin.Flag("find", "finds the offset of an address").String()
+	maxBlockHeight = kingpin.Flag("max-block-height", "finds the offset of an address").Default("0").Int64()
 )
 
 const (
@@ -66,12 +69,12 @@ func main() {
 	net := Network(*network)
 	deriver := deriver.NewAddressDeriver(net, xpubs, *m, *account)
 
-	if *find_addr != "" {
-		fmt.Printf("Searching for %s\n", *find_addr)
+	if *findAddr != "" {
+		fmt.Printf("Searching for %s\n", *findAddr)
 		for i := uint32(0); i < math.MaxUint32; i++ {
 			for _, change := range []uint32{0, 1} {
 				addr := deriver.Derive(change, i)
-				if addr.String() == *find_addr {
+				if addr.String() == *findAddr {
 					fmt.Printf("found: %s %s\n", addr.Path(), addr)
 					return
 				}
@@ -84,12 +87,10 @@ func main() {
 		return
 	}
 
-	// NOTE: maybe allow to query various services like BlockCypher etc. based on
-	//       CLI options
-	checker, err := balance.NewElectrumChecker(getServer())
+	checker, err := buildChecker()
 	PanicOnError(err)
 
-	tb := beancounter.NewCounter(checker, deriver, *lookahead, *start, *sleep)
+	tb := beancounter.NewCounter(checker, deriver, *lookahead, 0, *sleep)
 
 	tb.Count()
 
@@ -97,6 +98,17 @@ func main() {
 	tb.WriteTransactions()
 	tb.WriteBalances()
 	tb.WriteSummary()
+}
+
+func buildChecker() (balance.Checker, error) {
+	net := Network(*network)
+	switch *backend {
+	case "electrum":
+		return balance.NewElectrumChecker(getServer())
+	case "btcd":
+		return balance.NewBtcdChecker(*maxBlockHeight, (*addr).String(), *rpcuser, *rpcpass, net.ChainConfig())
+	}
+	return nil, fmt.Errorf("unreachable")
 }
 
 // pick a default server for each network if none provided
