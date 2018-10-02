@@ -1,6 +1,11 @@
 package utils
 
-import "github.com/btcsuite/btcd/chaincfg"
+import (
+	"math/rand"
+	"time"
+
+	"github.com/btcsuite/btcd/chaincfg"
+)
 
 // PanicOnError panics if err is not nil
 func PanicOnError(err error) {
@@ -37,3 +42,13 @@ const (
 	Mainnet Network = "mainnet"
 	Testnet Network = "testnet"
 )
+
+func ShuffleStrings(vals []string) {
+	r := rand.New(rand.NewSource(time.Now().Unix()))
+	for len(vals) > 0 {
+		n := len(vals)
+		randIndex := r.Intn(n)
+		vals[n-1], vals[randIndex] = vals[randIndex], vals[n-1]
+		vals = vals[:n-1]
+	}
+}

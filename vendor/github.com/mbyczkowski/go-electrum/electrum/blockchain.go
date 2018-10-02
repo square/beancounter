@@ -85,7 +85,6 @@ func (n *Node) BlockchainAddressGetBalance(address string) (*Balance, error) {
 		Result *Balance `json:"result"`
 	}{}
 	err := n.request("blockchain.address.get_balance", []interface{}{address}, resp)
-	resp.Result.Address = address
 	return resp.Result, err
 }
 

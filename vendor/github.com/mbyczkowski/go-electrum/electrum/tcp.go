@@ -5,9 +5,14 @@ import (
 	"crypto/tls"
 	"log"
 	"net"
+	"time"
 )
 
 var DebugMode bool
+
+const (
+	connTimeout = 2 * time.Second
+)
 
 type TCPTransport struct {
 	conn      net.Conn
@@ -16,7 +21,7 @@ type TCPTransport struct {
 }
 
 func NewTCPTransport(addr string) (*TCPTransport, error) {
-	conn, err := net.Dial("tcp", addr)
+	conn, err := net.DialTimeout("tcp", addr, connTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +37,10 @@ func NewTCPTransport(addr string) (*TCPTransport, error) {
 }
 
 func NewSSLTransport(addr string, config *tls.Config) (*TCPTransport, error) {
-	conn, err := tls.Dial("tcp", addr, config)
+	d := &net.Dialer{
+		Timeout: connTimeout,
+	}
+	conn, err := tls.DialWithDialer(d, "tcp", addr, config)
 	if err != nil {
 		return nil, err
 	}
@@ -44,6 +52,10 @@ func NewSSLTransport(addr string, config *tls.Config) (*TCPTransport, error) {
 	}
 	go t.listen()
 	return t, nil
+}
+
+func (t *TCPTransport) Address() string {
+	return t.conn.RemoteAddr().String()
 }
 
 func (t *TCPTransport) SendMessage(body []byte) error {

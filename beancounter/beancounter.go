@@ -20,9 +20,10 @@ import (
 // transactions for each address.
 // Beancounter takes balances and transaction histories and tally them up.
 type Beancounter struct {
-	account      string
-	net          Network
-	xpubs        []string
+	account string
+	net     Network
+	xpubs   []string
+
 	totalBalance uint64
 	transactions []transaction
 	balances     []addrBalance
@@ -86,13 +87,15 @@ func (b *Beancounter) sendWork() {
 	indexes := []uint32{b.start, b.start}
 	for {
 		for _, change := range []uint32{0, 1} {
-			for i := indexes[change]; i < b.getLastAddress(change); i++ {
+			lastAddr := b.getLastAddress(change)
+			for i := indexes[change]; i < lastAddr; i++ {
+				//go func(change, i uint32) {
+				// schedule work for checker
 				b.countMu.Lock()
 				b.derivedCount++
 				b.countMu.Unlock()
-
-				// schedule work for checker
 				b.checkerCh <- b.deriver.Derive(change, i)
+				//}(change, i)
 
 				indexes[change] = i
 			}

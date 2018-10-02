@@ -20,6 +20,7 @@ var (
 )
 
 type Transport interface {
+	Address() string
 	SendMessage([]byte) error
 	Responses() <-chan []byte
 	Errors() <-chan error
@@ -150,6 +151,10 @@ func (n *Node) listen() {
 			}
 		}
 	}
+}
+
+func (n *Node) Address() string {
+	return n.transport.Address()
 }
 
 // listenPush returns a channel of messages matching the method.

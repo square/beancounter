@@ -3,17 +3,21 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"math"
 	"os"
 	"strings"
 
 	"gopkg.in/alecthomas/kingpin.v2"
 
-	"github.com/qshuai/go-electrum/electrum"
+	"github.com/mbyczkowski/go-electrum/electrum"
 	"github.com/square/beancounter/balance"
 	"github.com/square/beancounter/beancounter"
 	"github.com/square/beancounter/deriver"
 	. "github.com/square/beancounter/utils"
+
+	"net/http"
+	_ "net/http/pprof"
 )
 
 var (
@@ -38,6 +42,10 @@ const (
 )
 
 func main() {
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+
 	kingpin.Version("0.0.2")
 	kingpin.Parse()
 

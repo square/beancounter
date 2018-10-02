@@ -47,4 +47,4 @@
 
 [[constraint]]
   branch = "master"
-  name = "github.com/qshuai/go-electrum"
+  name = "github.com/mbyczkowski/go-electrum"
