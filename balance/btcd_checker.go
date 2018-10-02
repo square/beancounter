@@ -138,7 +138,7 @@ func (bc *BtcdChecker) Subscribe(addrCh <-chan *deriver.Address) <-chan *Respons
 		for addr := range addrCh {
 			wg.Add(1)
 			// do not block on each Fetch API call
-			bc.processFetch(addr, respCh, &wg)
+			go bc.processFetch(addr, respCh, &wg)
 		}
 		// ensure that all addresses are processed and written to the output channel
 		// before closing it.

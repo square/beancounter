@@ -115,6 +115,14 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:7175a5cfecce31630305da1f9c27e3575244ac0efdf43c977cebb60f51a7a16a"
+  name = "github.com/mbyczkowski/go-electrum"
+  packages = ["electrum"]
+  pruneopts = "UT"
+  revision = "c8e2ef373957257ca1cddaf499c7a47bb4ef9ac3"
+
+[[projects]]
+  branch = "master"
   digest = "1:f611266e3ac01ab4adb6f1d67f6c1be82998d02f452faff450596658712d860b"
   name = "github.com/olekukonko/tablewriter"
   packages = ["."]
@@ -136,14 +144,6 @@
   pruneopts = "UT"
   revision = "792786c7400a136282c1664665ae0a8db921c6c2"
   version = "v1.0.0"
-
-[[projects]]
-  branch = "master"
-  digest = "1:b870a4d34137fdeeebe17448f3dc5bd505ba6091a0dfbf086d9934336a9ea2b2"
-  name = "github.com/qshuai/go-electrum"
-  packages = ["electrum"]
-  pruneopts = "UT"
-  revision = "970805057ff878a0ba0aa55aa9f72d6e96295a60"
 
 [[projects]]
   digest = "1:18752d0b95816a1b777505a97f71c7467a8445b8ffb55631a7bf779f6ba4fa83"
@@ -179,9 +179,9 @@
     "github.com/btcsuite/btcd/txscript",
     "github.com/btcsuite/btcutil",
     "github.com/btcsuite/btcutil/hdkeychain",
+    "github.com/mbyczkowski/go-electrum/electrum",
     "github.com/olekukonko/tablewriter",
     "github.com/pkg/errors",
-    "github.com/qshuai/go-electrum/electrum",
     "github.com/stretchr/testify/assert",
     "gopkg.in/alecthomas/kingpin.v2",
   ]
