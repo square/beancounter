@@ -3,49 +3,42 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 
-	"gopkg.in/alecthomas/kingpin.v2"
-
-	"github.com/mbyczkowski/go-electrum/electrum"
+	"github.com/square/beancounter/accounter"
 	"github.com/square/beancounter/backend"
-	"github.com/square/beancounter/beancounter"
+	"github.com/square/beancounter/backend/electrum"
 	"github.com/square/beancounter/deriver"
 	. "github.com/square/beancounter/utils"
-
-	"net/http"
-	_ "net/http/pprof"
+	"gopkg.in/alecthomas/kingpin.v2"
+	//	_ "net/http/pprof"
 )
 
+// TODO: create sub commands:
+// - findAddr
+// - findBlock
+// - watchMultiSig
+// - watch
+// - singleAddress
 var (
 	m              = kingpin.Flag("m", "number of signatures (quorum)").Short('m').Required().Int()
 	n              = kingpin.Flag("n", "number of public keys").Short('n').Required().Int()
 	account        = kingpin.Flag("account", "account number").Required().Uint32()
-	network        = kingpin.Flag("network", "'mainnet' or 'testnet'").Default("mainnet").Enum("mainnet", "testnet")
 	backend_name   = kingpin.Flag("backend", "Personal Btcd or public Electrum nodes").Default("electrum").Enum("electrum", "btcd")
 	lookahead      = kingpin.Flag("lookahead", "lookahead size").Default("100").Uint32()
-	sleep          = kingpin.Flag("sleep", "sleep between requests to avoid API rate-limit").Default("1s").Duration()
 	addr           = kingpin.Flag("addr", "Electrum or btcd server").PlaceHolder("HOST:PORT").TCP()
 	rpcuser        = kingpin.Flag("rpcuser", "RPC username").PlaceHolder("USER").String()
 	rpcpass        = kingpin.Flag("rpcpass", "RPC password").PlaceHolder("PASSWORD").String()
 	debug          = kingpin.Flag("debug", "debug output").Default("false").Bool()
-	findAddr       = kingpin.Flag("find", "finds the offset of an address").String()
+	findAddr       = kingpin.Flag("find-addr", "finds the offset of an address").String()
 	maxBlockHeight = kingpin.Flag("max-block-height", "finds the offset of an address").Default("0").Int64()
-)
-
-const (
-	mainnetDefaultServer = "electrum.petrkr.net:50002"
-	testnetDefaultServer = "electrum_testnet_unlimited.criptolayer.net:50102"
+	singleAddress  = kingpin.Flag("single-address", "for debugging purpose").String()
 )
 
 func main() {
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
-
 	kingpin.Version("0.0.2")
 	kingpin.Parse()
 
@@ -66,16 +59,27 @@ func main() {
 	}
 
 	xpubs := make([]string, 0, *n)
+	var network Network
+	if *singleAddress == "" {
+		reader := bufio.NewReader(os.Stdin)
+		for i := 0; i < *n; i++ {
+			fmt.Printf("Enter pubkey #%d out of #%d:\n", i+1, *n)
+			xpub, _ := reader.ReadString('\n')
+			xpubs = append(xpubs, strings.TrimSpace(xpub))
+		}
 
-	reader := bufio.NewReader(os.Stdin)
-	for i := 0; i < *n; i++ {
-		fmt.Printf("Enter %s #%d out of #%d:\n", pubKeyPrefix(), i+1, *n)
-		xpub, _ := reader.ReadString('\n')
-		xpubs = append(xpubs, strings.TrimSpace(xpub))
+		// Check that all the addresses have the same prefix
+		for i := 1; i < *n; i++ {
+			if xpubs[0][0:4] != xpubs[i][0:4] {
+				fmt.Printf("Prefixes must match: %s %s\n", xpubs[0], xpubs[i])
+				return
+			}
+		}
+		network = XpubToNetwork(xpubs[0])
+	} else {
+		network = AddressToNetwork(*singleAddress)
 	}
-
-	net := Network(*network)
-	deriver := deriver.NewAddressDeriver(net, xpubs, *m, *account)
+	deriver := deriver.NewAddressDeriver(network, xpubs, *m, *account, *singleAddress)
 
 	if *findAddr != "" {
 		fmt.Printf("Searching for %s\n", *findAddr)
@@ -95,54 +99,46 @@ func main() {
 		return
 	}
 
-	backend, err := buildBackend()
+	backend, err := buildBackend(network)
 	PanicOnError(err)
 
-	tb := beancounter.NewCounter(backend, deriver, *lookahead, 0, *sleep)
+	// TODO: if maxBlockHeight is 0, we should default to current height - 6.
+	if *maxBlockHeight == 0 {
+		panic("maxBlockHeight not set")
+	}
+	tb := accounter.New(backend, deriver, *lookahead, *maxBlockHeight)
 
-	tb.Count()
+	balance := tb.ComputeBalance()
 
-	fmt.Printf("\n")
-	tb.WriteTransactions()
-	tb.WriteBalances()
-	tb.WriteSummary()
+	fmt.Printf("Balance: %d\n", balance)
+	//tb.WriteTransactions()
+	//tb.WriteBalances()
+	//tb.WriteSummary()
 }
 
 // TODO: return *backend.Backend, error instead?
-func buildBackend() (backend.Backend, error) {
-	net := Network(*network)
+func buildBackend(network Network) (backend.Backend, error) {
+	//net := Network(*network)
 	switch *backend_name {
 	case "electrum":
-		return backend.NewElectrumBackend(getServer())
+		addr, port := getServer(network)
+		return backend.NewElectrumBackend(addr, port, network)
 	case "btcd":
-		return backend.NewBtcdBackend(*maxBlockHeight, (*addr).String(), *rpcuser, *rpcpass, net.ChainConfig())
+		return backend.NewBtcdBackend(*maxBlockHeight, (*addr).String(), *rpcuser, *rpcpass, network)
 	}
 	return nil, fmt.Errorf("unreachable")
 }
 
 // pick a default server for each network if none provided
-func getServer() string {
+func getServer(network Network) (string, string) {
 	if *addr != nil {
-		return (*addr).String()
+		return (*addr).IP.String(), strconv.Itoa((*addr).Port)
 	}
-	switch *network {
+	switch network {
 	case "mainnet":
-		return mainnetDefaultServer
+		return "electrum.petrkr.net", "s50002"
 	case "testnet":
-		return testnetDefaultServer
-	default:
-		panic("unreachable")
-	}
-}
-
-// prefixes come from BIP32
-// https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#serialization-format
-func pubKeyPrefix() string {
-	switch *network {
-	case "mainnet":
-		return "xpub"
-	case "testnet":
-		return "tpub"
+		return "electrum_testnet_unlimited.criptolayer.net", "s50102"
 	default:
 		panic("unreachable")
 	}

@@ -1,9 +1,7 @@
 package utils
 
 import (
-	"math/rand"
-	"time"
-
+	"fmt"
 	"github.com/btcsuite/btcd/chaincfg"
 )
 
@@ -38,17 +36,38 @@ func (n Network) ChainConfig() *chaincfg.Params {
 	}
 }
 
+// prefixes come from BIP32
+// https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#serialization-format
+func XpubToNetwork(xpub string) Network {
+	prefix := xpub[0:4]
+	switch prefix {
+	case "xpub":
+		return Mainnet
+	case "tpub":
+		return Testnet
+	default:
+		panic(fmt.Sprintf("unknown prefix: %s", xpub))
+	}
+}
+
+func AddressToNetwork(addr string) Network {
+	switch addr[0] {
+	case 'm':
+		return Testnet // pubkey hash
+	case 'n':
+		return Testnet // pubkey hash
+	case '2':
+		return Testnet //script hash
+	case '1':
+		return Mainnet // pubkey hash
+	case '3':
+		return Mainnet // script hash
+	default:
+		panic(fmt.Sprintf("unknown prefix: %s", addr))
+	}
+}
+
 const (
 	Mainnet Network = "mainnet"
 	Testnet Network = "testnet"
 )
-
-func ShuffleStrings(vals []string) {
-	r := rand.New(rand.NewSource(time.Now().Unix()))
-	for len(vals) > 0 {
-		n := len(vals)
-		randIndex := r.Intn(n)
-		vals[n-1], vals[randIndex] = vals[randIndex], vals[n-1]
-		vals = vals[:n-1]
-	}
-}
