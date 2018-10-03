@@ -1,4 +1,4 @@
-package balance
+package backend
 
 import (
 	"time"
@@ -6,11 +6,9 @@ import (
 	"github.com/square/beancounter/deriver"
 )
 
-// Checker is an interface that wraps the Fetch method.
-// Checker fetches the balance information for an address.
-// It provides a simple Fetch API to check a single address and a Subscribe API
-// for continuous check of of address stream.
-type Checker interface {
+// Backend is an interface which abstracts different types of backends.
+// Enables fetching transaction information (for a given address) as well as block information.
+type Backend interface {
 	Fetch(addr string) *Response
 	Subscribe(addrCh <-chan *deriver.Address) <-chan *Response
 }

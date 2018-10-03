@@ -1,4 +1,4 @@
-package balance
+package backend
 
 import (
 	"crypto/tls"
@@ -30,10 +30,10 @@ import (
 //
 // Electrum protocol docs: https://electrumx.readthedocs.io/en/latest/protocol.html
 
-// ElectrumChecker wraps Electrum node and its API to provide a simple
+// ElectrumBackend wraps Electrum node and its API to provide a simple
 // balance and transaction history information for a given address.
-// ElectrumChecker implements Checker interface.
-type ElectrumChecker struct {
+// ElectrumBackend implements Backend interface.
+type ElectrumBackend struct {
 	nodeMu           sync.RWMutex // mutex to guard reads/writes to nodes map
 	nodes            map[string]*electrum.Node
 	blacklistedNodes map[string]struct{}
@@ -49,11 +49,11 @@ type serverPeersSubscribe struct {
 	features []string
 }
 
-// NewElectrumChecker returns a new ElectrumChecker structs or errors.
+// NewElectrumBackend returns a new ElectrumBackend structs or errors.
 // Initially connects to 1 node. A background job handles connecting to
 // additional peers. The background job fails if there are no peers left.
-func NewElectrumChecker(addr string) (*ElectrumChecker, error) {
-	ec := &ElectrumChecker{
+func NewElectrumBackend(addr string) (*ElectrumBackend, error) {
+	ec := &ElectrumBackend{
 		nodes:            make(map[string]*electrum.Node),
 		blacklistedNodes: make(map[string]struct{}),
 	}
@@ -74,7 +74,7 @@ func NewElectrumChecker(addr string) (*ElectrumChecker, error) {
 
 // Fetch queries connected node for address balance and transaction history and
 // returns Response.
-func (e *ElectrumChecker) Fetch(addr string) *Response {
+func (e *ElectrumBackend) Fetch(addr string) *Response {
 	n := e.randomNode()
 	b, err := n.BlockchainAddressGetBalance(addr)
 	if err != nil {
@@ -112,10 +112,10 @@ func (e *ElectrumChecker) Fetch(addr string) *Response {
 // It takes a channel of addresses and returns a channel of responses, to which
 // it is writing asynchronuously.
 // TODO: Looks like Subscribe implementation is separate from implementation
-//       details of each checker and therefore could be abstracted into a separate
-//       struct/interface (e.g. there could be a StreamingChecker interface that
+//       details of each backend and therefore could be abstracted into a separate
+//       struct/interface (e.g. there could be a StreamingBackend interface that
 //       implements Subcribe method).
-func (e *ElectrumChecker) Subscribe(addrCh <-chan *deriver.Address) <-chan *Response {
+func (e *ElectrumBackend) Subscribe(addrCh <-chan *deriver.Address) <-chan *Response {
 	respCh := make(chan *Response, 100)
 	go func() {
 		var wg sync.WaitGroup
@@ -135,7 +135,7 @@ func (e *ElectrumChecker) Subscribe(addrCh <-chan *deriver.Address) <-chan *Resp
 
 // processFetch fetches the data for an address, sends the response to the outgoing
 // channel and marks itself as done in the shared WorkGroup
-func (e *ElectrumChecker) processFetch(addr *deriver.Address, out chan<- *Response, wg *sync.WaitGroup) {
+func (e *ElectrumBackend) processFetch(addr *deriver.Address, out chan<- *Response, wg *sync.WaitGroup) {
 	resp := e.Fetch(addr.String())
 	resp.Address = addr
 	out <- resp
@@ -143,7 +143,7 @@ func (e *ElectrumChecker) processFetch(addr *deriver.Address, out chan<- *Respon
 }
 
 // add a node to the map of nodes.
-func (e *ElectrumChecker) addNode(addr string) error {
+func (e *ElectrumBackend) addNode(addr string) error {
 	e.nodeMu.RLock()
 	_, existsGood := e.nodes[addr]
 	_, existsBad := e.blacklistedNodes[addr]
@@ -176,14 +176,14 @@ func (e *ElectrumChecker) addNode(addr string) error {
 }
 
 // remove a node from the map of nodes.
-func (e *ElectrumChecker) removeNode(addr string) {
+func (e *ElectrumBackend) removeNode(addr string) {
 	e.nodeMu.Lock()
 	defer e.nodeMu.Unlock()
 
 	delete(e.nodes, addr)
 }
 
-func (e *ElectrumChecker) fetchPeers() {
+func (e *ElectrumBackend) fetchPeers() {
 	e.nodeMu.Lock()
 	numNodes := len(e.nodes)
 	e.nodeMu.Unlock()
@@ -229,7 +229,7 @@ func (e *ElectrumChecker) fetchPeers() {
 	}
 }
 
-func (e *ElectrumChecker) randomNode() *electrum.Node {
+func (e *ElectrumBackend) randomNode() *electrum.Node {
 	e.nodeMu.RLock()
 	defer e.nodeMu.RUnlock()
 

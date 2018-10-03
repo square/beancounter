@@ -1,4 +1,4 @@
-package balance
+package backend
 
 import (
 	"fmt"
@@ -13,10 +13,10 @@ import (
 	"github.com/square/beancounter/deriver"
 )
 
-// BtcdChecker wraps Btcd node and its API to provide a simple
+// BtcdBackend wraps Btcd node and its API to provide a simple
 // balance and transaction history information for a given address.
-// BtcdChecker implements Checker interface.
-type BtcdChecker struct {
+// BtcdBackend implements Backend interface.
+type BtcdBackend struct {
 	client            *rpcclient.Client
 	net               *chaincfg.Params
 	maxBlockHeight    int64
@@ -33,13 +33,13 @@ const (
 	maxTxsPerAddr = 1000
 )
 
-// NewBtcdChecker returns a new BtcdChecker structs or errors.
-// BtcdChecker takes into account maxBlockHeight and ignores any transactions that belong to higher blocks.
+// NewBtcdBackend returns a new BtcdBackend structs or errors.
+// BtcdBackend takes into account maxBlockHeight and ignores any transactions that belong to higher blocks.
 // If 0 is passed, then the block chain is queried for max block height and minConfirmations is subtracted
 // (to avoid querying blocks that might potentially be orphaned).
 //
-// NOTE: BtcdChecker is assumed to be connecting to a personal node, hence it disables TLS for now
-func NewBtcdChecker(maxBlockHeight int64, hostPort, user, pass string, net *chaincfg.Params) (*BtcdChecker, error) {
+// NOTE: BtcdBackend is assumed to be connecting to a personal node, hence it disables TLS for now
+func NewBtcdBackend(maxBlockHeight int64, hostPort, user, pass string, net *chaincfg.Params) (*BtcdBackend, error) {
 	connCfg := &rpcclient.ConnConfig{
 		Host:         hostPort,
 		User:         user,
@@ -64,12 +64,12 @@ func NewBtcdChecker(maxBlockHeight int64, hostPort, user, pass string, net *chai
 		return nil, fmt.Errorf("wanted max block height: %d, block chain has %d (with # confirmations of %d)", maxBlockHeight, maxAllowedHeight, minConfirmations)
 	}
 
-	bc := &BtcdChecker{client: client, net: net, maxBlockHeight: maxBlockHeight}
+	bc := &BtcdBackend{client: client, net: net, maxBlockHeight: maxBlockHeight}
 	return bc, nil
 }
 
 // Fetch queries connected node for address balance and transaction history and returns Response.
-func (bc *BtcdChecker) Fetch(addr string) *Response {
+func (bc *BtcdBackend) Fetch(addr string) *Response {
 	address, err := btcutil.DecodeAddress(addr, bc.net)
 	if err != nil {
 		return errResp(errors.Wrap(err, "could not decode address for "+addr))
@@ -123,7 +123,7 @@ func (bc *BtcdChecker) Fetch(addr string) *Response {
 }
 
 // getBlockHeight returns a block height for a given block hash or returns an error
-func (bc *BtcdChecker) getBlockHeight(hash string) (int64, error) {
+func (bc *BtcdBackend) getBlockHeight(hash string) (int64, error) {
 	h, err := chainhash.NewHashFromStr(hash)
 	if err != nil {
 		return -1, err
@@ -150,10 +150,10 @@ func containsAddr(arr []string, s string) bool {
 // It takes a channel of addresses and returns a channel of responses, to which
 // it is writing asynchronuously.
 // TODO: Looks like Subscribe implementation is separate from implementation
-//       details of each checker and therefore could be abstracted into a separate
-//       struct/interface (e.g. there could be a StreamingChecker interface that
+//       details of each backend and therefore could be abstracted into a separate
+//       struct/interface (e.g. there could be a StreamingBackend interface that
 //       implements Subcribe method).
-func (bc *BtcdChecker) Subscribe(addrCh <-chan *deriver.Address) <-chan *Response {
+func (bc *BtcdBackend) Subscribe(addrCh <-chan *deriver.Address) <-chan *Response {
 	respCh := make(chan *Response, 100)
 	go func() {
 		var wg sync.WaitGroup
@@ -173,7 +173,7 @@ func (bc *BtcdChecker) Subscribe(addrCh <-chan *deriver.Address) <-chan *Respons
 
 // processFetch fetches the data for an address, sends the response to the outgoing
 // channel and marks itself as done in the shared WorkGroup
-func (bc *BtcdChecker) processFetch(addr *deriver.Address, out chan<- *Response, wg *sync.WaitGroup) {
+func (bc *BtcdBackend) processFetch(addr *deriver.Address, out chan<- *Response, wg *sync.WaitGroup) {
 	resp := bc.Fetch(addr.String())
 	resp.Address = addr
 	out <- resp

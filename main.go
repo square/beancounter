@@ -11,7 +11,7 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/mbyczkowski/go-electrum/electrum"
-	"github.com/square/beancounter/balance"
+	"github.com/square/beancounter/backend"
 	"github.com/square/beancounter/beancounter"
 	"github.com/square/beancounter/deriver"
 	. "github.com/square/beancounter/utils"
@@ -25,7 +25,7 @@ var (
 	n              = kingpin.Flag("n", "number of public keys").Short('n').Required().Int()
 	account        = kingpin.Flag("account", "account number").Required().Uint32()
 	network        = kingpin.Flag("network", "'mainnet' or 'testnet'").Default("mainnet").Enum("mainnet", "testnet")
-	backend        = kingpin.Flag("backend", "Personal Btcd or public Electrum nodes").Default("electrum").Enum("electrum", "btcd")
+	backend_name   = kingpin.Flag("backend", "Personal Btcd or public Electrum nodes").Default("electrum").Enum("electrum", "btcd")
 	lookahead      = kingpin.Flag("lookahead", "lookahead size").Default("100").Uint32()
 	sleep          = kingpin.Flag("sleep", "sleep between requests to avoid API rate-limit").Default("1s").Duration()
 	addr           = kingpin.Flag("addr", "Electrum or btcd server").PlaceHolder("HOST:PORT").TCP()
@@ -95,10 +95,10 @@ func main() {
 		return
 	}
 
-	checker, err := buildChecker()
+	backend, err := buildBackend()
 	PanicOnError(err)
 
-	tb := beancounter.NewCounter(checker, deriver, *lookahead, 0, *sleep)
+	tb := beancounter.NewCounter(backend, deriver, *lookahead, 0, *sleep)
 
 	tb.Count()
 
@@ -108,13 +108,14 @@ func main() {
 	tb.WriteSummary()
 }
 
-func buildChecker() (balance.Checker, error) {
+// TODO: return *backend.Backend, error instead?
+func buildBackend() (backend.Backend, error) {
 	net := Network(*network)
-	switch *backend {
+	switch *backend_name {
 	case "electrum":
-		return balance.NewElectrumChecker(getServer())
+		return backend.NewElectrumBackend(getServer())
 	case "btcd":
-		return balance.NewBtcdChecker(*maxBlockHeight, (*addr).String(), *rpcuser, *rpcpass, net.ChainConfig())
+		return backend.NewBtcdBackend(*maxBlockHeight, (*addr).String(), *rpcuser, *rpcpass, net.ChainConfig())
 	}
 	return nil, fmt.Errorf("unreachable")
 }

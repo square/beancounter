@@ -9,14 +9,14 @@ import (
 	"time"
 
 	"github.com/olekukonko/tablewriter"
-	"github.com/square/beancounter/balance"
+	"github.com/square/beancounter/backend"
 	"github.com/square/beancounter/deriver"
 	. "github.com/square/beancounter/utils"
 )
 
 // Beancounter is the main struct that can count the balance for a given wallet.
-// The main elements of Beancounter are checker and deriver. Deriver is used to
-// derive new addresses for a given config, and checker checks the balances and
+// The main elements of Beancounter are backend and deriver. Deriver is used to
+// derive new addresses for a given config, and backend checks the balances and
 // transactions for each address.
 // Beancounter takes balances and transaction histories and tally them up.
 type Beancounter struct {
@@ -30,7 +30,7 @@ type Beancounter struct {
 	// NOTE: maybe track unconfirmed balance and fees. We might want to also track each transaction's amount and whether
 	// it's a credit or debit.
 
-	checker   balance.Checker
+	backend   backend.Backend
 	deriver   *deriver.AddressDeriver
 	lookahead uint32
 	start     uint32
@@ -43,14 +43,14 @@ type Beancounter struct {
 	checkedCount  uint32
 
 	checkerCh  chan *deriver.Address
-	receivedCh <-chan *balance.Response
+	receivedCh <-chan *backend.Response
 }
 
 // NewCounter instantiates the Beancounter
 // TODO: find a better way to pass options to the NewCounter. Maybe thru a config or functional option params?
-func NewCounter(checker balance.Checker, drvr *deriver.AddressDeriver, lookahead, start uint32, sleep time.Duration) *Beancounter {
+func NewCounter(backend backend.Backend, drvr *deriver.AddressDeriver, lookahead, start uint32, sleep time.Duration) *Beancounter {
 	b := &Beancounter{
-		checker:       checker,
+		backend:       backend,
 		deriver:       drvr,
 		lookahead:     lookahead,
 		start:         start,
@@ -58,12 +58,12 @@ func NewCounter(checker balance.Checker, drvr *deriver.AddressDeriver, lookahead
 		lastAddresses: [2]uint32{start + lookahead, start + lookahead},
 		checkerCh:     make(chan *deriver.Address, 100),
 	}
-	b.receivedCh = b.checker.Subscribe(b.checkerCh)
+	b.receivedCh = b.backend.Subscribe(b.checkerCh)
 	return b
 }
 
 // Count is Beancounters main function that derives the addresses and feeds them
-// into the checker.
+// into the backend.
 // The address derivation, address checking for balance and transactions, and the final
 // tally are all happening asynchronuously
 // NOTE: maybe add a reset step so that Beancounter struct can be reused
@@ -78,7 +78,7 @@ func (b *Beancounter) Count() {
 }
 
 // sendWork starts the send loop that derives new addresses and sends them to a
-// a checker.
+// a backend.
 // Addresses are derived in batches (up to a `lookahead` index) and the range can
 // be extended if a transaction for a given address is found. E.g.:
 // only addresses 0-99 are supposed to be checked, but there was a transaction at
@@ -90,7 +90,7 @@ func (b *Beancounter) sendWork() {
 			lastAddr := b.getLastAddress(change)
 			for i := indexes[change]; i < lastAddr; i++ {
 				//go func(change, i uint32) {
-				// schedule work for checker
+				// schedule work for backend
 				b.countMu.Lock()
 				b.derivedCount++
 				b.countMu.Unlock()
@@ -244,8 +244,8 @@ func (b *Beancounter) WriteBalances() {
 }
 
 // addBalance update the total balance and list of transactions for each Response
-// from the checker.
-func (b *Beancounter) addBalance(r *balance.Response) {
+// from the backend.
+func (b *Beancounter) addBalance(r *backend.Response) {
 	b.totalBalance += r.Balance
 	if r.HasTransactions() {
 		// move lookahead since we found a transaction
