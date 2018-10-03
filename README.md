@@ -4,24 +4,31 @@ Beancounter
 [![license](http://img.shields.io/badge/license-apache_2.0-blue.svg?style=flat)](https://raw.githubusercontent.com/square/beancounter/master/LICENSE) [![travis](https://img.shields.io/travis/com/square/beancounter.svg?maxAge=3600&logo=travis&label=travis)](https://travis-ci.com/square/beancounter) [![report](https://goreportcard.com/badge/github.com/square/beancounter)](https://goreportcard.com/report/github.com/square/beancounter)
 
 Beancounter is a command line utility to audit the balance of Hierarchical Deterministic (HD) wallets. The tool is
-designed to scale and work for wallets with a large number of addresses or transactions. The tool supports multiple
-types of wallets, including multisig + segwit.
+designed to scale and work for wallets with a large number of addresses or a large number of transactions.
+The tool supports various types of wallets, including multisig + segwit.
 
 We picked Go as the programming language, because Go makes building the tool for different platforms trivial. We also
 appreciate the ability to distribute static binaries which don't have external dependencies.
 
-The process to determine a deterministic wallet's balance is relatively simple:
-1. Derive external (receive) and internal (change) addresses.
-2. Connect to Electrum servers and fetch balance information for single addresses.
-3. Sum the balances and repeat until there's a large number of unused addresses.
+We built Beancounter because we wanted a tool which can compute the balance of a wallet at any
+given block height.
 
-Relying on Electrum servers has pros and cons. In a future version of this tool, we may offer an alternative source to
-query or compute balance information (such as connecting to a Bitcoin full node).
+The process to determine a deterministic wallet's balance involves the following:
+1. Use the blockchain to build an address index. Bitcoin Core doesn't offer this, but Btcd,
+   Electrum, and a few other tools do.
+2. Derive external (receive) and internal (change) addresses.
+3. Fetch the transaction history for a single address. Prune the history at the desired block height.
+4. Compute the credit and debit for each transaction. Repeat until we find a large number of
+   unused addresses.
+
+This tool currently supports two backends: Electrum and Btcd. Using Electrum is easier (connects to
+public nodes) but has some disadvantages (need to trust a third party, potential privacy leak, etc.).
+Using Btcd requires running a private node and the initial sync can take a long time.
 
 ![logo](https://raw.githubusercontent.com/square/beancounter/master/coffee.jpg)
 
-Getting Started
-===============
+Getting Started (using Electrum)
+================================
 
 ```
 brew install dep
