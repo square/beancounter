@@ -13,6 +13,9 @@ import (
 	"github.com/square/beancounter/deriver"
 )
 
+// BtcdChecker wraps Btcd node and its API to provide a simple
+// balance and transaction history information for a given address.
+// BtcdChecker implements Checker interface.
 type BtcdChecker struct {
 	client            *rpcclient.Client
 	net               *chaincfg.Params
@@ -20,70 +23,88 @@ type BtcdChecker struct {
 	blockHeightLookup map[string]uint64
 }
 
+const (
+	// min number of confirmations required
+	// any blocks with lower confirmation numbers will be ignored
+	minConfirmations = 6
+	// For now assume that there cannot be more than maxTxsPerAddr.
+	// Ideally, if maxTxsPerAddr is reached then we should paginate and retrieve
+	// all the transactions.
+	maxTxsPerAddr = 1000
+)
+
 // NewBtcdChecker returns a new BtcdChecker structs or errors.
+// BtcdChecker takes into account maxBlockHeight and ignores any transactions that belong to higher blocks.
+// If 0 is passed, then the block chain is queried for max block height and minConfirmations is subtracted
+// (to avoid querying blocks that might potentially be orphaned).
+//
+// NOTE: BtcdChecker is assumed to be connecting to a personal node, hence it disables TLS for now
 func NewBtcdChecker(maxBlockHeight int64, hostPort, user, pass string, net *chaincfg.Params) (*BtcdChecker, error) {
 	connCfg := &rpcclient.ConnConfig{
 		Host:         hostPort,
 		User:         user,
 		Pass:         pass,
 		HTTPPostMode: true, // Bitcoin core only supports HTTP POST mode
-		DisableTLS:   true, // Bitcoin core does not provide TLS by default
+		DisableTLS:   true, // Since we're assuming a personal bitcoin node for now, skip TLS
 	}
 	client, err := rpcclient.New(connCfg, nil)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "could not create a Btcd RPC client")
 	}
 
 	actualMaxHeight, err := client.GetBlockCount()
+	maxAllowedHeight := actualMaxHeight - minConfirmations
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "could not connect to the Btcd server")
 	}
 	if maxBlockHeight == 0 {
-		maxBlockHeight = actualMaxHeight
+		maxBlockHeight = maxAllowedHeight
 	}
-	if actualMaxHeight < maxBlockHeight {
-		return nil, fmt.Errorf("wanted max block height: %d, block chain has %d", maxBlockHeight, actualMaxHeight)
+	if maxAllowedHeight < maxBlockHeight {
+		return nil, fmt.Errorf("wanted max block height: %d, block chain has %d (with # confirmations of %d)", maxBlockHeight, maxAllowedHeight, minConfirmations)
 	}
 
 	bc := &BtcdChecker{client: client, net: net, maxBlockHeight: maxBlockHeight}
 	return bc, nil
 }
 
+// Fetch queries connected node for address balance and transaction history and returns Response.
 func (bc *BtcdChecker) Fetch(addr string) *Response {
 	address, err := btcutil.DecodeAddress(addr, bc.net)
 	if err != nil {
-		return &Response{Error: err}
+		return errResp(errors.Wrap(err, "could not decode address for "+addr))
 	}
 
-	resp, err := bc.client.SearchRawTransactionsVerbose(address, 0, 1000, true, false, nil)
+	resp, err := bc.client.SearchRawTransactionsVerbose(address, 0, maxTxsPerAddr+1, true, false, nil)
 	if err != nil {
-		return &Response{Error: err}
+		return errResp(errors.Wrap(err, "could not fetch transactions for "+addr))
+	}
+
+	if len(resp) > maxTxsPerAddr {
+		return errResp(fmt.Errorf("address %s has more than max allowed transactions of %d", addr, maxTxsPerAddr))
 	}
 
 	balance := uint64(0)
 	rcvdTxs := make(map[string]uint64)
 
 	var txs []Transaction
-	fmt.Printf("\t %s: Found # transactions %d\n", addr, len(resp))
 	for _, tx := range resp {
 		txs = append(txs, Transaction{Hash: tx.Txid})
 		height, err := bc.getBlockHeight(tx.BlockHash)
 		if err != nil {
-			return &Response{Error: errors.Wrap(err, "error getting block height for hash=%s")}
+			return errResp(errors.Wrap(err, "error getting block height for hash %s"))
 		}
 
 		if height > bc.maxBlockHeight {
 			continue
 		}
 
-		fmt.Printf("\t %s: Found transaction %s, block: %d\n", addr, tx.Txid, height)
 		txBalance := uint64(0)
 		for _, vout := range tx.Vout {
 			if containsAddr(vout.ScriptPubKey.Addresses, addr) {
 				txBalance += uint64(vout.Value * math.Pow10(8))
 				key := fmt.Sprintf("%s:%d", tx.Txid, vout.N)
 				rcvdTxs[key] = txBalance
-				fmt.Printf("\t\t value: %d\n", txBalance)
 			}
 		}
 		balance += txBalance
@@ -93,7 +114,6 @@ func (bc *BtcdChecker) Fetch(addr string) *Response {
 		for _, vin := range tx.Vin {
 			key := fmt.Sprintf("%s:%d", vin.Txid, vin.Vout)
 			if bal, exists := rcvdTxs[key]; exists {
-				fmt.Printf("\t %s: transaction %s was send back to the adddr. Subtracting!\n", addr, tx.Txid)
 				balance -= bal
 			}
 		}
@@ -102,6 +122,7 @@ func (bc *BtcdChecker) Fetch(addr string) *Response {
 	return &Response{Balance: balance, Transactions: txs}
 }
 
+// getBlockHeight returns a block height for a given block hash or returns an error
 func (bc *BtcdChecker) getBlockHeight(hash string) (int64, error) {
 	h, err := chainhash.NewHashFromStr(hash)
 	if err != nil {
@@ -115,6 +136,7 @@ func (bc *BtcdChecker) getBlockHeight(hash string) (int64, error) {
 	return resp.Height, nil
 }
 
+// containsAddr returns true if an array of strings contains string s
 func containsAddr(arr []string, s string) bool {
 	for _, v := range arr {
 		if v == s {
@@ -156,4 +178,8 @@ func (bc *BtcdChecker) processFetch(addr *deriver.Address, out chan<- *Response,
 	resp.Address = addr
 	out <- resp
 	wg.Done()
+}
+
+func errResp(err error) *Response {
+	return &Response{Error: err}
 }
