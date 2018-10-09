@@ -155,6 +155,10 @@ func NewNode(addr, port string, network utils.Network) (*Node, error) {
 	return n, nil
 }
 
+func (n *Node) Disconnect() error {
+	return n.transport.Shutdown()
+}
+
 func NodeIdent(addr, port string) string {
 	return fmt.Sprintf("%s|%s", addr, port)
 }

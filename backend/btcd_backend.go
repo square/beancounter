@@ -29,7 +29,6 @@ type BtcdBackend struct {
 	txResponses   chan *TxResponse
 
 	// internal channels
-	wg             sync.WaitGroup
 	transactionsMu sync.Mutex // mutex to guard read/writes to transactions map
 	transactions   map[string]int64
 }
@@ -98,7 +97,7 @@ func NewBtcdBackend(maxBlockHeight int64, hostPort, user, pass string, network N
 }
 
 func (b *BtcdBackend) AddrRequest(addr *deriver.Address) {
-	reporter.GetInstance().AddressesScheduled++
+	reporter.GetInstance().IncAddressesScheduled()
 	reporter.GetInstance().Log(fmt.Sprintf("scheduling address: %s", addr))
 	b.addrRequests <- addr
 }
@@ -109,10 +108,6 @@ func (b *BtcdBackend) AddrResponses() <-chan *AddrResponse {
 
 func (b *BtcdBackend) TxResponses() <-chan *TxResponse {
 	return b.txResponses
-}
-
-func (b *BtcdBackend) Dec() {
-	// NOOP
 }
 
 func (b *BtcdBackend) Finish() {
@@ -185,9 +180,7 @@ func (b *BtcdBackend) scheduleTx(txs []*btcjson.SearchRawTransactionsResult) {
 		b.transactions[tx.Txid] = height
 		b.transactionsMu.Unlock()
 
-		b.wg.Add(1)
-
-		reporter.GetInstance().TxScheduled++
+		reporter.GetInstance().IncTxScheduled()
 		reporter.GetInstance().Log(fmt.Sprintf("scheduling tx: %s", tx.Txid))
 
 		b.txResponses <- &TxResponse{

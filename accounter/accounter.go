@@ -27,7 +27,8 @@ type Accounter struct {
 	xpubs     []string
 	maxHeight int64 // height at which we want to compute the balance
 
-	addresses    map[string]address
+	addresses map[string]address
+
 	transactions map[string]transaction
 
 	backend   backend.Backend
@@ -100,13 +101,7 @@ func (a *Accounter) fetchTransactions() {
 	// send work runs forever
 	go a.sendWork()
 
-	// receiveWork also runs forever. We can probably combine both?
-	go a.recvWork()
-
-	for !a.complete() {
-		// todo: this is lame, use a mutux. We can probably re-use a.backend.Finish()...
-		time.Sleep(1 * time.Second)
-	}
+	a.recvWork()
 
 	reporter.GetInstance().Log("done fetching addresses; waiting to finish...")
 	a.backend.Finish()
@@ -124,7 +119,7 @@ func (a *Accounter) processTransactions() {
 			delete(a.transactions, hash)
 		}
 	}
-	reporter.GetInstance().TxAfterFilter = len(a.transactions)
+	reporter.GetInstance().SetTxAfterFilter(int32(len(a.transactions)))
 	reporter.GetInstance().Log("done filtering")
 
 	// TODO: we could check that scheduled == fetched in the metrics we track in reporter.
@@ -235,10 +230,17 @@ func (a *Accounter) sendWork() {
 }
 
 func (a *Accounter) recvWork() {
+	addrResponses := a.addrResponses
+	txResponses := a.txResponses
 	for {
 		select {
-		case resp := <-a.addrResponses:
-			reporter.GetInstance().AddressesFetched++
+		case resp, ok := <-addrResponses:
+			// channel is closed now, so ignore this case by blocking forever
+			if !ok {
+				addrResponses = nil
+				continue
+			}
+			reporter.GetInstance().IncAddressesFetched()
 
 			a.countMu.Lock()
 			a.checkedCount++
@@ -256,8 +258,14 @@ func (a *Accounter) recvWork() {
 				a.lastAddresses[resp.Address.Change()] = Max(a.lastAddresses[resp.Address.Change()], resp.Address.Index()+a.lookahead)
 				a.countMu.Unlock()
 			}
-		case resp := <-a.txResponses:
-			reporter.GetInstance().TxFetched++
+		case resp, ok := <-txResponses:
+			// channel is closed now, so ignore this case by blocking forever
+			if !ok {
+				txResponses = nil
+				continue
+			}
+
+			reporter.GetInstance().IncTxFetched()
 
 			tx := transaction{
 				height: resp.Height,
@@ -266,28 +274,30 @@ func (a *Accounter) recvWork() {
 				vout:   []vout{},
 			}
 			a.transactions[resp.Hash] = tx
-
-			a.backend.Dec()
+		case <-time.Tick(1 * time.Second):
+			if a.complete() {
+				return
+			}
 		}
 	}
 }
 
 // getLastAddress synchronizes access to lastAddresses array
-func (b *Accounter) getLastAddress(change uint32) uint32 {
-	b.countMu.Lock()
-	defer b.countMu.Unlock()
+func (a *Accounter) getLastAddress(change uint32) uint32 {
+	a.countMu.Lock()
+	defer a.countMu.Unlock()
 
-	return b.lastAddresses[change]
+	return a.lastAddresses[change]
 }
 
 // complete checks if all addresses have been derived and checked.
 // Since most of the work happens asynchronuously, there needs to be a termination
 // condition.
-func (b *Accounter) complete() bool {
-	b.countMu.Lock()
-	defer b.countMu.Unlock()
+func (a *Accounter) complete() bool {
+	a.countMu.Lock()
+	defer a.countMu.Unlock()
 
 	// We are done when the right number of addresses were scheduled, fetched and processed
-	indexes := b.lastAddresses[0] + b.lastAddresses[1]
-	return b.derivedCount == indexes && b.checkedCount == indexes
+	indexes := a.lastAddresses[0] + a.lastAddresses[1]
+	return a.derivedCount == indexes && a.checkedCount == indexes
 }
