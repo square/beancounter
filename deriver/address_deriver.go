@@ -3,6 +3,7 @@ package deriver
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"sort"
@@ -19,10 +20,11 @@ import (
 // It follows the conventions as written in BIP32
 // // https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#serialization-format
 type AddressDeriver struct {
-	network Network
-	xpubs   []string
-	m       int
-	account uint32
+	network       Network
+	xpubs         []string
+	m             int
+	account       uint32
+	singleAddress string
 }
 
 // Address wraps a simple wallet address.
@@ -56,19 +58,48 @@ func (a *Address) Index() uint32 {
 	return a.addrIndex
 }
 
+func (a *Address) Address() btcutil.Address {
+	address, err := btcutil.DecodeAddress(a.addr, a.net.ChainConfig())
+	if err != nil {
+		panic("failed to decode address")
+	}
+
+	return address
+}
+
+// TODO: might be more efficient to store the script in the struct.
+func (a *Address) Script() string {
+	address := a.Address()
+	script, err := txscript.PayToAddrScript(address)
+	if err != nil {
+		panic("failed to encode script")
+	}
+	return hex.EncodeToString(script)
+}
+
 // NewAddressDeriver returns a new instance of AddressDeriver
-func NewAddressDeriver(network Network, xpubs []string, m int, account uint32) *AddressDeriver {
+func NewAddressDeriver(network Network, xpubs []string, m int, account uint32, singleAddress string) *AddressDeriver {
 	return &AddressDeriver{
-		network: network,
-		xpubs:   xpubs,
-		m:       m,
-		account: account,
+		network:       network,
+		xpubs:         xpubs,
+		m:             m,
+		account:       account,
+		singleAddress: singleAddress,
 	}
 }
 
 // Derive dervives an address for given change and address index.
 // It supports derivation using single extended public key and multisig + segwit.
 func (d *AddressDeriver) Derive(change uint32, addressIndex uint32) *Address {
+	if d.singleAddress != "" {
+		return &Address{
+			path:      "n/a",
+			addr:      d.singleAddress,
+			net:       d.network,
+			change:    0,
+			addrIndex: 0,
+		}
+	}
 
 	path := fmt.Sprintf("m/%s/%d/%d/%d", coinType(d.network), d.account, change, addressIndex)
 	addr := &Address{path: path, net: d.network, change: change, addrIndex: addressIndex}

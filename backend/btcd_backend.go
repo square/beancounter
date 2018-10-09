@@ -2,15 +2,15 @@ package backend
 
 import (
 	"fmt"
-	"math"
 	"sync"
 
-	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/btcjson"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/rpcclient"
-	"github.com/btcsuite/btcutil"
 	"github.com/pkg/errors"
 	"github.com/square/beancounter/deriver"
+	"github.com/square/beancounter/reporter"
+	. "github.com/square/beancounter/utils"
 )
 
 // BtcdBackend wraps Btcd node and its API to provide a simple
@@ -18,9 +18,20 @@ import (
 // BtcdBackend implements Backend interface.
 type BtcdBackend struct {
 	client            *rpcclient.Client
-	net               *chaincfg.Params
+	network           Network
 	maxBlockHeight    int64
-	blockHeightLookup map[string]uint64
+	blockHeightMu     sync.Mutex // mutex to guard read/writes to blockHeightLookup map
+	blockHeightLookup map[string]int64
+
+	// channels used to communicate with the Accounter
+	addrRequests  chan *deriver.Address
+	addrResponses chan *AddrResponse
+	txResponses   chan *TxResponse
+
+	// internal channels
+	wg             sync.WaitGroup
+	transactionsMu sync.Mutex // mutex to guard read/writes to transactions map
+	transactions   map[string]int64
 }
 
 const (
@@ -31,6 +42,10 @@ const (
 	// Ideally, if maxTxsPerAddr is reached then we should paginate and retrieve
 	// all the transactions.
 	maxTxsPerAddr = 1000
+
+	addrRequestsChanSize = 100
+
+	concurrency = 100
 )
 
 // NewBtcdBackend returns a new BtcdBackend structs or errors.
@@ -39,7 +54,7 @@ const (
 // (to avoid querying blocks that might potentially be orphaned).
 //
 // NOTE: BtcdBackend is assumed to be connecting to a personal node, hence it disables TLS for now
-func NewBtcdBackend(maxBlockHeight int64, hostPort, user, pass string, net *chaincfg.Params) (*BtcdBackend, error) {
+func NewBtcdBackend(maxBlockHeight int64, hostPort, user, pass string, network Network) (*BtcdBackend, error) {
 	connCfg := &rpcclient.ConnConfig{
 		Host:         hostPort,
 		User:         user,
@@ -64,122 +79,157 @@ func NewBtcdBackend(maxBlockHeight int64, hostPort, user, pass string, net *chai
 		return nil, fmt.Errorf("wanted max block height: %d, block chain has %d (with # confirmations of %d)", maxBlockHeight, maxAllowedHeight, minConfirmations)
 	}
 
-	bc := &BtcdBackend{client: client, net: net, maxBlockHeight: maxBlockHeight}
-	return bc, nil
+	b := &BtcdBackend{
+		client:            client,
+		network:           network,
+		maxBlockHeight:    maxBlockHeight,
+		addrRequests:      make(chan *deriver.Address, addrRequestsChanSize),
+		addrResponses:     make(chan *AddrResponse, addrRequestsChanSize),
+		txResponses:       make(chan *TxResponse, 2*maxTxsPerAddr),
+		blockHeightLookup: make(map[string]int64),
+		transactions:      make(map[string]int64),
+	}
+
+	// launch
+	for i := 0; i < concurrency; i++ {
+		go b.processRequests()
+	}
+	return b, nil
 }
 
-// Fetch queries connected node for address balance and transaction history and returns Response.
-func (bc *BtcdBackend) Fetch(addr string) *Response {
-	address, err := btcutil.DecodeAddress(addr, bc.net)
-	if err != nil {
-		return errResp(errors.Wrap(err, "could not decode address for "+addr))
-	}
+func (b *BtcdBackend) AddrRequest(addr *deriver.Address) {
+	reporter.GetInstance().AddressesScheduled++
+	reporter.GetInstance().Log(fmt.Sprintf("scheduling address: %s", addr))
+	b.addrRequests <- addr
+}
 
-	resp, err := bc.client.SearchRawTransactionsVerbose(address, 0, maxTxsPerAddr+1, true, false, nil)
-	if err != nil {
-		return errResp(errors.Wrap(err, "could not fetch transactions for "+addr))
-	}
+func (b *BtcdBackend) AddrResponses() <-chan *AddrResponse {
+	return b.addrResponses
+}
 
-	if len(resp) > maxTxsPerAddr {
-		return errResp(fmt.Errorf("address %s has more than max allowed transactions of %d", addr, maxTxsPerAddr))
-	}
+func (b *BtcdBackend) TxResponses() <-chan *TxResponse {
+	return b.txResponses
+}
 
-	balance := uint64(0)
-	rcvdTxs := make(map[string]uint64)
+func (b *BtcdBackend) Dec() {
+	// NOOP
+}
 
-	var txs []Transaction
-	for _, tx := range resp {
-		txs = append(txs, Transaction{Hash: tx.Txid})
-		height, err := bc.getBlockHeight(tx.BlockHash)
+func (b *BtcdBackend) Finish() {
+	close(b.addrResponses)
+	b.client.Disconnect()
+}
+
+func (b *BtcdBackend) processRequests() {
+	for addr := range b.addrRequests {
+		err := b.processAddrRequest(addr)
 		if err != nil {
-			return errResp(errors.Wrap(err, "error getting block height for hash %s"))
-		}
-
-		if height > bc.maxBlockHeight {
-			continue
-		}
-
-		txBalance := uint64(0)
-		for _, vout := range tx.Vout {
-			if containsAddr(vout.ScriptPubKey.Addresses, addr) {
-				txBalance += uint64(vout.Value * math.Pow10(8))
-				key := fmt.Sprintf("%s:%d", tx.Txid, vout.N)
-				rcvdTxs[key] = txBalance
-			}
-		}
-		balance += txBalance
-	}
-
-	for _, tx := range resp {
-		for _, vin := range tx.Vin {
-			key := fmt.Sprintf("%s:%d", vin.Txid, vin.Vout)
-			if bal, exists := rcvdTxs[key]; exists {
-				balance -= bal
-			}
+			panic(fmt.Sprintf("processAddrRequest failed: %+v", err))
 		}
 	}
+}
 
-	return &Response{Balance: balance, Transactions: txs}
+func (b *BtcdBackend) processAddrRequest(address *deriver.Address) error {
+	addr := address.Script()
+	txs, err := b.client.SearchRawTransactionsVerbose(address.Address(), 0, maxTxsPerAddr+1, true, false, nil)
+	if err != nil {
+		if jerr, ok := err.(*btcjson.RPCError); ok {
+			switch jerr.Code {
+			case btcjson.ErrRPCInvalidAddressOrKey:
+				// the address doesn't exist in the blockchain - either because it was not used
+				// or given backend doesn't have a complete blockchain
+				b.addrResponses <- &AddrResponse{
+					Address: address,
+				}
+				return nil
+			}
+		}
+		return errors.Wrap(err, "could not fetch transactions for "+addr)
+	}
+
+	if len(txs) > maxTxsPerAddr {
+		return fmt.Errorf("address %s has more than max allowed transactions of %d", addr, maxTxsPerAddr)
+	}
+
+	txHashes := make([]string, 0, len(txs))
+	for _, tx := range txs {
+		txHashes = append(txHashes, tx.Txid)
+	}
+
+	go b.scheduleTx(txs)
+
+	b.addrResponses <- &AddrResponse{
+		Address:  address,
+		TxHashes: txHashes,
+	}
+
+	return nil
+}
+
+func (b *BtcdBackend) scheduleTx(txs []*btcjson.SearchRawTransactionsResult) {
+	for _, tx := range txs {
+		b.transactionsMu.Lock()
+		_, exists := b.transactions[tx.Txid]
+		b.transactionsMu.Unlock()
+
+		if exists {
+			return
+		}
+
+		height, err := b.getBlockHeight(tx.BlockHash)
+		if err != nil {
+			panic(fmt.Sprintf("error getting block height for hash %s: %s", tx.BlockHash, err.Error()))
+		}
+
+		b.transactionsMu.Lock()
+		b.transactions[tx.Txid] = height
+		b.transactionsMu.Unlock()
+
+		b.wg.Add(1)
+
+		reporter.GetInstance().TxScheduled++
+		reporter.GetInstance().Log(fmt.Sprintf("scheduling tx: %s", tx.Txid))
+
+		b.txResponses <- &TxResponse{
+			Hash:   tx.Txid,
+			Height: b.getTxHeight(tx.Txid),
+			Hex:    tx.Hex,
+		}
+	}
+}
+
+func (b *BtcdBackend) getTxHeight(txHash string) int64 {
+	b.transactionsMu.Lock()
+	defer b.transactionsMu.Unlock()
+
+	height, exists := b.transactions[txHash]
+	if !exists {
+		panic(fmt.Sprintf("inconsistent cache: %s", txHash))
+	}
+	return height
 }
 
 // getBlockHeight returns a block height for a given block hash or returns an error
-func (bc *BtcdBackend) getBlockHeight(hash string) (int64, error) {
+func (b *BtcdBackend) getBlockHeight(hash string) (int64, error) {
+	b.blockHeightMu.Lock()
+	height, exists := b.blockHeightLookup[hash]
+	b.blockHeightMu.Unlock()
+	if exists {
+		return height, nil
+	}
+
 	h, err := chainhash.NewHashFromStr(hash)
 	if err != nil {
 		return -1, err
 	}
-	resp, err := bc.client.GetBlockVerbose(h)
+	resp, err := b.client.GetBlockVerbose(h)
 	if err != nil {
 		return -1, err
 	}
 
+	b.blockHeightMu.Lock()
+	b.blockHeightLookup[hash] = resp.Height
+	b.blockHeightMu.Unlock()
+
 	return resp.Height, nil
-}
-
-// containsAddr returns true if an array of strings contains string s
-func containsAddr(arr []string, s string) bool {
-	for _, v := range arr {
-		if v == s {
-			return true
-		}
-	}
-	return false
-}
-
-// Subscribe provides a bidirectional streaming of checks for addresses.
-// It takes a channel of addresses and returns a channel of responses, to which
-// it is writing asynchronuously.
-// TODO: Looks like Subscribe implementation is separate from implementation
-//       details of each backend and therefore could be abstracted into a separate
-//       struct/interface (e.g. there could be a StreamingBackend interface that
-//       implements Subcribe method).
-func (bc *BtcdBackend) Subscribe(addrCh <-chan *deriver.Address) <-chan *Response {
-	respCh := make(chan *Response, 100)
-	go func() {
-		var wg sync.WaitGroup
-		for addr := range addrCh {
-			wg.Add(1)
-			// do not block on each Fetch API call
-			go bc.processFetch(addr, respCh, &wg)
-		}
-		// ensure that all addresses are processed and written to the output channel
-		// before closing it.
-		wg.Wait()
-		close(respCh)
-	}()
-
-	return respCh
-}
-
-// processFetch fetches the data for an address, sends the response to the outgoing
-// channel and marks itself as done in the shared WorkGroup
-func (bc *BtcdBackend) processFetch(addr *deriver.Address, out chan<- *Response, wg *sync.WaitGroup) {
-	resp := bc.Fetch(addr.String())
-	resp.Address = addr
-	out <- resp
-	wg.Done()
-}
-
-func errResp(err error) *Response {
-	return &Response{Error: err}
 }
