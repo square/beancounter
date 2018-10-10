@@ -36,6 +36,8 @@ var (
 	findAddr       = kingpin.Flag("find-addr", "finds the offset of an address").String()
 	maxBlockHeight = kingpin.Flag("max-block-height", "finds the offset of an address").Default("0").Int64()
 	singleAddress  = kingpin.Flag("single-address", "for debugging purpose").String()
+	cache          = kingpin.Flag("cache", "use cache").Default("false").Bool()
+	fromFile       = kingpin.Flag("from-file", "prepopulate cache from file").PlaceHolder("FILEPATH").String()
 )
 
 func main() {
@@ -119,14 +121,34 @@ func main() {
 // TODO: return *backend.Backend, error instead?
 func buildBackend(network Network) (backend.Backend, error) {
 	//net := Network(*network)
+	var b backend.Backend
+	var err error
 	switch *backend_name {
 	case "electrum":
 		addr, port := getServer(network)
-		return backend.NewElectrumBackend(addr, port, network)
+		b, err = backend.NewElectrumBackend(addr, port, network)
+		if err != nil {
+			return nil, err
+		}
 	case "btcd":
-		return backend.NewBtcdBackend(*maxBlockHeight, (*addr).String(), *rpcuser, *rpcpass, network)
+		b, err = backend.NewBtcdBackend(*maxBlockHeight, (*addr).String(), *rpcuser, *rpcpass, network)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("unreachable")
 	}
-	return nil, fmt.Errorf("unreachable")
+	if *cache {
+		var f *os.File
+		if *fromFile != "" {
+			f, err = os.Open(*fromFile)
+			if err != nil {
+				return nil, err
+			}
+		}
+		b, err = backend.NewCacheBackend(b, f)
+	}
+	return b, err
 }
 
 // pick a default server for each network if none provided
