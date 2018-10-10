@@ -159,7 +159,7 @@ func (eb *ElectrumBackend) addNode(addr, port string, network Network) error {
 		return err
 	}
 	// Check genesis block
-	if feature.Genesis != genesisBlock(network) {
+	if feature.Genesis != GenesisBlock(network) {
 		eb.nodeMu.Lock()
 		eb.blacklistedNodes[ident] = struct{}{}
 		eb.nodeMu.Unlock()
