@@ -30,8 +30,6 @@ type Backend interface {
 	AddrResponses() <-chan *AddrResponse
 	TxResponses() <-chan *TxResponse
 
-	// Dec is super hacky. Need to find another wait to do this...
-	Dec()
 	Finish()
 }
 

@@ -45,10 +45,10 @@ type ElectrumBackend struct {
 
 	// internal channels
 	peersRequests  chan struct{}
-	wg             sync.WaitGroup
 	txRequests     chan string
 	transactionsMu sync.Mutex // mutex to guard read/writes to transactions map
 	transactions   map[string]int64
+	doneCh         chan bool
 }
 
 const (
@@ -81,6 +81,7 @@ func NewElectrumBackend(addr, port string, network Network) (*ElectrumBackend, e
 		peersRequests: make(chan struct{}),
 		txRequests:    make(chan string, 2*maxPeers),
 		transactions:  make(map[string]int64),
+		doneCh:        make(chan bool),
 	}
 	if err := eb.addNode(addr, port, network); err != nil {
 		fmt.Printf("failed to connect to initial node: %+v", err)
@@ -89,12 +90,14 @@ func NewElectrumBackend(addr, port string, network Network) (*ElectrumBackend, e
 
 	// goroutine to continuously fetch additional peers
 	go func() {
+		eb.findPeers()
 		for {
-			eb.peersRequests <- struct{}{}
-			eb.nodeMu.Lock()
-			reporter.GetInstance().Peers = len(eb.nodes)
-			eb.nodeMu.Unlock()
-			time.Sleep(peerFetchInterval)
+			select {
+			case <-time.Tick(peerFetchInterval):
+				eb.findPeers()
+			case <-eb.doneCh:
+				return
+			}
 		}
 	}()
 
@@ -102,7 +105,7 @@ func NewElectrumBackend(addr, port string, network Network) (*ElectrumBackend, e
 }
 
 func (eb *ElectrumBackend) AddrRequest(addr *deriver.Address) {
-	reporter.GetInstance().AddressesScheduled++
+	reporter.GetInstance().IncAddressesScheduled()
 	reporter.GetInstance().Log(fmt.Sprintf("scheduling address: %s", addr))
 	eb.addrRequests <- addr
 }
@@ -115,12 +118,9 @@ func (eb *ElectrumBackend) TxResponses() <-chan *TxResponse {
 	return eb.txResponses
 }
 
-func (eb *ElectrumBackend) Dec() {
-	eb.wg.Done()
-}
-
 func (eb *ElectrumBackend) Finish() {
-	eb.wg.Wait()
+	close(eb.doneCh)
+	eb.removeAllNodes()
 	// TODO: we could gracefully disconnect from all the nodes. We currently don't, because the
 	// program is going to terminate soon anyways.
 }
@@ -313,9 +313,7 @@ func (eb *ElectrumBackend) scheduleTx(txs []*electrum.Transaction) {
 		eb.transactions[tx.Hash] = int64(tx.Height)
 		eb.transactionsMu.Unlock()
 
-		eb.wg.Add(1)
-
-		reporter.GetInstance().TxScheduled++
+		reporter.GetInstance().IncTxScheduled()
 		reporter.GetInstance().Log(fmt.Sprintf("scheduling tx: %s", tx.Hash))
 
 		eb.txRequests <- tx.Hash
@@ -341,8 +339,29 @@ func checkVersion(ver string) error {
 func (eb *ElectrumBackend) removeNode(ident string) {
 	eb.nodeMu.Lock()
 	defer eb.nodeMu.Unlock()
+	node, exists := eb.nodes[ident]
+	if exists {
+		node.Disconnect()
+		delete(eb.nodes, ident)
+	}
+}
 
-	delete(eb.nodes, ident)
+func (eb *ElectrumBackend) removeAllNodes() {
+	eb.nodeMu.Lock()
+	defer eb.nodeMu.Unlock()
+
+	for _, node := range eb.nodes {
+		node.Disconnect()
+	}
+
+	eb.nodes = map[string]*electrum.Node{}
+}
+
+func (eb *ElectrumBackend) findPeers() {
+	eb.peersRequests <- struct{}{}
+	eb.nodeMu.Lock()
+	reporter.GetInstance().SetPeers(int32(len(eb.nodes)))
+	eb.nodeMu.Unlock()
 }
 
 func (eb *ElectrumBackend) addPeer(peer electrum.Peer) {
