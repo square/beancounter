@@ -6,6 +6,11 @@ go:
   - '1.10.x'
   - '1.x'
 
-script:
-  - go test -v ./...
+before_install:
+  - go get github.com/mattn/goveralls
 
+script:
+  - go test -v ./... -coverprofile coverage.out
+
+after_success:
+  - $HOME/gopath/bin/goveralls -coverprofile coverage.out -service=travis-ci
