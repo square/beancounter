@@ -38,6 +38,12 @@ type Address struct {
 	addrIndex uint32
 }
 
+// NewAddress creates a new instance of Address, given network, derivation path,
+// change value and address index.
+func NewAddress(path, addr string, net Network, change, addrIndex uint32) *Address {
+	return &Address{path: path, addr: addr, net: net, change: change, addrIndex: addrIndex}
+}
+
 // Path returns derivation path
 func (a *Address) Path() string {
 	return a.path
@@ -56,6 +62,10 @@ func (a *Address) Change() uint32 {
 // Index returns the address index
 func (a *Address) Index() uint32 {
 	return a.addrIndex
+}
+
+func (a *Address) Network() Network {
+	return a.net
 }
 
 func (a *Address) Address() btcutil.Address {

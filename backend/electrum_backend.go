@@ -12,7 +12,7 @@ import (
 	"github.com/square/beancounter/backend/electrum"
 	"github.com/square/beancounter/deriver"
 	"github.com/square/beancounter/reporter"
-	. "github.com/square/beancounter/utils"
+	"github.com/square/beancounter/utils"
 )
 
 // Fetches transaction information from Electrum servers.
@@ -36,7 +36,7 @@ type ElectrumBackend struct {
 	// todo: blacklistedNodes should be a timestamp and we should re-try after a certain amount of
 	// time has elapsed.
 	blacklistedNodes map[string]struct{}
-	network          Network
+	network          utils.Network
 
 	// channels used to communicate with the Accounter
 	addrRequests  chan *deriver.Address
@@ -57,15 +57,18 @@ const (
 )
 
 var (
-	ErrIncorrectGenesisBlock  = errors.New("Incorrect genesis block")
-	ErrIncompatibleVersion    = errors.New("Incompatible version")
+	// ErrIncorrectGenesisBlock means electrum is set-up to for wrong currency
+	ErrIncorrectGenesisBlock = errors.New("Incorrect genesis block")
+	// ErrIncompatibleVersion means electrum server version is not compatible with electrum client lib
+	ErrIncompatibleVersion = errors.New("Incompatible version")
+	// ErrFailedNegotiateVersion means electrum server doesn't support version(s) used by the electrum client lib
 	ErrFailedNegotiateVersion = errors.New("Failed negotiate version")
 )
 
 // NewElectrumBackend returns a new ElectrumBackend structs or errors.
 // Initially connects to 1 node. A background job handles connecting to
 // additional peers. The background job fails if there are no peers left.
-func NewElectrumBackend(addr, port string, network Network) (*ElectrumBackend, error) {
+func NewElectrumBackend(addr, port string, network utils.Network) (*ElectrumBackend, error) {
 
 	// TODO: should the channels have k * maxPeers buffers? Each node needs to enqueue a
 	// potentially large number of transactions. If all nodes are doing that at the same time,
@@ -104,20 +107,29 @@ func NewElectrumBackend(addr, port string, network Network) (*ElectrumBackend, e
 	return eb, nil
 }
 
+// AddrRequest schedules a request to the backend to lookup information related
+// to the given address.
 func (eb *ElectrumBackend) AddrRequest(addr *deriver.Address) {
 	reporter.GetInstance().IncAddressesScheduled()
 	reporter.GetInstance().Log(fmt.Sprintf("scheduling address: %s", addr))
 	eb.addrRequests <- addr
 }
 
+// AddrResponses exposes a channel that allows to consume backend's responses to
+// address requests created with AddrRequest()
 func (eb *ElectrumBackend) AddrResponses() <-chan *AddrResponse {
 	return eb.addrResponses
 }
 
+// TxResponses exposes a channel that allows to consume backend's responses to
+// address requests created with AddrRequest().
+// If an address has any transactions then they will be sent to this channel by the
+// backend.
 func (eb *ElectrumBackend) TxResponses() <-chan *TxResponse {
 	return eb.txResponses
 }
 
+// Finish informs the backend to stop doing its work.
 func (eb *ElectrumBackend) Finish() {
 	close(eb.doneCh)
 	eb.removeAllNodes()
@@ -126,7 +138,7 @@ func (eb *ElectrumBackend) Finish() {
 }
 
 // Connect to a node and add it to the map of nodes
-func (eb *ElectrumBackend) addNode(addr, port string, network Network) error {
+func (eb *ElectrumBackend) addNode(addr, port string, network utils.Network) error {
 	ident := electrum.NodeIdent(addr, port)
 
 	eb.nodeMu.RLock()
@@ -159,7 +171,7 @@ func (eb *ElectrumBackend) addNode(addr, port string, network Network) error {
 		return err
 	}
 	// Check genesis block
-	if feature.Genesis != GenesisBlock(network) {
+	if feature.Genesis != utils.GenesisBlock(network) {
 		eb.nodeMu.Lock()
 		eb.blacklistedNodes[ident] = struct{}{}
 		eb.nodeMu.Unlock()
@@ -376,7 +388,7 @@ func (eb *ElectrumBackend) addPeer(peer electrum.Peer) {
 	}
 	for _, feature := range peer.Features {
 		if strings.HasPrefix(feature, "t") {
-			go func(addr, feature string, network Network) {
+			go func(addr, feature string, network utils.Network) {
 				if err := eb.addNode(addr, feature, network); err != nil {
 					log.Printf("error on addNode: %+v\n", err)
 				}
@@ -386,7 +398,7 @@ func (eb *ElectrumBackend) addPeer(peer electrum.Peer) {
 	}
 	for _, feature := range peer.Features {
 		if strings.HasPrefix(feature, "s") {
-			go func(addr, feature string, network Network) {
+			go func(addr, feature string, network utils.Network) {
 				if err := eb.addNode(addr, feature, network); err != nil {
 					log.Printf("error on addNode: %+v\n", err)
 				}
