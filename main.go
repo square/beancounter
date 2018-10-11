@@ -27,7 +27,7 @@ var (
 	m              = kingpin.Flag("m", "number of signatures (quorum)").Short('m').Required().Int()
 	n              = kingpin.Flag("n", "number of public keys").Short('n').Required().Int()
 	account        = kingpin.Flag("account", "account number").Required().Uint32()
-	backend_name   = kingpin.Flag("backend", "Personal Btcd or public Electrum nodes").Default("electrum").Enum("electrum", "btcd")
+	backendName    = kingpin.Flag("backend", "Personal Btcd or public Electrum nodes").Default("electrum").Enum("electrum", "btcd", "electrum-recorder", "btcd-recorder", "fixture")
 	lookahead      = kingpin.Flag("lookahead", "lookahead size").Default("100").Uint32()
 	addr           = kingpin.Flag("addr", "Electrum or btcd server").PlaceHolder("HOST:PORT").TCP()
 	rpcuser        = kingpin.Flag("rpcuser", "RPC username").PlaceHolder("USER").String()
@@ -37,7 +37,7 @@ var (
 	maxBlockHeight = kingpin.Flag("max-block-height", "finds the offset of an address").Default("0").Int64()
 	singleAddress  = kingpin.Flag("single-address", "for debugging purpose").String()
 	cache          = kingpin.Flag("cache", "use cache").Default("false").Bool()
-	fromFile       = kingpin.Flag("from-file", "prepopulate cache from file").PlaceHolder("FILEPATH").String()
+	fixtureFile    = kingpin.Flag("fixture-file", "fixture file to use for recording data or reading from").PlaceHolder("FILEPATH").String()
 )
 
 func main() {
@@ -113,9 +113,6 @@ func main() {
 	balance := tb.ComputeBalance()
 
 	fmt.Printf("Balance: %d\n", balance)
-	//tb.WriteTransactions()
-	//tb.WriteBalances()
-	//tb.WriteSummary()
 }
 
 // TODO: return *backend.Backend, error instead?
@@ -123,7 +120,7 @@ func buildBackend(network Network) (backend.Backend, error) {
 	//net := Network(*network)
 	var b backend.Backend
 	var err error
-	switch *backend_name {
+	switch *backendName {
 	case "electrum":
 		addr, port := getServer(network)
 		b, err = backend.NewElectrumBackend(addr, port, network)
@@ -135,18 +132,35 @@ func buildBackend(network Network) (backend.Backend, error) {
 		if err != nil {
 			return nil, err
 		}
+	case "electrum-recorder":
+		if *fixtureFile == "" {
+			panic("electrum-recorder backend requires a --fixture-file to be specified, so data can be recorded.")
+		}
+		addr, port := getServer(network)
+		b, err = backend.NewElectrumBackend(addr, port, network)
+		if err != nil {
+			return nil, err
+		}
+		b, err = backend.NewRecorderBackend(b, *fixtureFile)
+	case "btcd-recorder":
+		if *fixtureFile == "" {
+			panic("btcd-recorder backend requires a --fixture-file to be specified, so data can be recorded.")
+		}
+		b, err = backend.NewBtcdBackend(*maxBlockHeight, (*addr).String(), *rpcuser, *rpcpass, network)
+		if err != nil {
+			return nil, err
+		}
+		b, err = backend.NewRecorderBackend(b, *fixtureFile)
+	case "fixture":
+		if *fixtureFile == "" {
+			panic("fixture backend requires a file to load data from")
+		}
+		b, err = backend.NewFixtureBackend(*fixtureFile)
+		if err != nil {
+			return nil, err
+		}
 	default:
 		return nil, fmt.Errorf("unreachable")
-	}
-	if *cache {
-		var f *os.File
-		if *fromFile != "" {
-			f, err = os.Open(*fromFile)
-			if err != nil {
-				return nil, err
-			}
-		}
-		b, err = backend.NewCacheBackend(b, f)
 	}
 	return b, err
 }
