@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/square/beancounter/deriver"
 	"github.com/square/beancounter/reporter"
-	. "github.com/square/beancounter/utils"
+	"github.com/square/beancounter/utils"
 )
 
 // BtcdBackend wraps Btcd node and its API to provide a simple
@@ -18,7 +18,7 @@ import (
 // BtcdBackend implements Backend interface.
 type BtcdBackend struct {
 	client            *rpcclient.Client
-	network           Network
+	network           utils.Network
 	maxBlockHeight    int64
 	blockHeightMu     sync.Mutex // mutex to guard read/writes to blockHeightLookup map
 	blockHeightLookup map[string]int64
@@ -53,7 +53,7 @@ const (
 // (to avoid querying blocks that might potentially be orphaned).
 //
 // NOTE: BtcdBackend is assumed to be connecting to a personal node, hence it disables TLS for now
-func NewBtcdBackend(maxBlockHeight int64, hostPort, user, pass string, network Network) (*BtcdBackend, error) {
+func NewBtcdBackend(maxBlockHeight int64, hostPort, user, pass string, network utils.Network) (*BtcdBackend, error) {
 	connCfg := &rpcclient.ConnConfig{
 		Host:         hostPort,
 		User:         user,
@@ -96,20 +96,29 @@ func NewBtcdBackend(maxBlockHeight int64, hostPort, user, pass string, network N
 	return b, nil
 }
 
+// AddrRequest schedules a request to the backend to lookup information related
+// to the given address.
 func (b *BtcdBackend) AddrRequest(addr *deriver.Address) {
 	reporter.GetInstance().IncAddressesScheduled()
 	reporter.GetInstance().Log(fmt.Sprintf("scheduling address: %s", addr))
 	b.addrRequests <- addr
 }
 
+// AddrResponses exposes a channel that allows to consume backend's responses to
+// address requests created with AddrRequest()
 func (b *BtcdBackend) AddrResponses() <-chan *AddrResponse {
 	return b.addrResponses
 }
 
+// TxResponses exposes a channel that allows to consume backend's responses to
+// address requests created with addrrequest().
+// if an address has any transactions then they will be sent to this channel by the
+// backend.
 func (b *BtcdBackend) TxResponses() <-chan *TxResponse {
 	return b.txResponses
 }
 
+// Finish informs the backend to stop doing its work.
 func (b *BtcdBackend) Finish() {
 	close(b.addrResponses)
 	b.client.Disconnect()

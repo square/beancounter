@@ -1,8 +1,11 @@
 package backend
 
 import (
-	. "github.com/square/beancounter/utils"
+	"github.com/square/beancounter/utils"
 )
+
+// index, address and transaction and helper structs used by recorder and fixture
+// backends marshal/unmarshal address and transaction data
 
 type index struct {
 	Addresses    []address     `json:"addresses"`
@@ -10,12 +13,12 @@ type index struct {
 }
 
 type address struct {
-	Address      string   `json:"address"`
-	Path         string   `json:"path"`
-	Network      Network  `json:"network"`
-	Change       uint32   `json:"change"`
-	AddressIndex uint32   `json:"addr_index"`
-	TxHashes     []string `json:"tx_hashes"`
+	Address      string        `json:"address"`
+	Path         string        `json:"path"`
+	Network      utils.Network `json:"network"`
+	Change       uint32        `json:"change"`
+	AddressIndex uint32        `json:"addr_index"`
+	TxHashes     []string      `json:"tx_hashes"`
 }
 
 type byAddress []address

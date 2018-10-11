@@ -9,7 +9,6 @@ import (
 
 	"github.com/square/beancounter/deriver"
 	"github.com/square/beancounter/reporter"
-	. "github.com/square/beancounter/utils"
 )
 
 // RecorderBackend wraps Btcd node and its API to provide a simple
@@ -55,18 +54,27 @@ func NewRecorderBackend(b Backend, filepath string) (*RecorderBackend, error) {
 	return rb, nil
 }
 
+// AddrRequest schedules a request to the backend to lookup information related
+// to the given address.
 func (rb *RecorderBackend) AddrRequest(addr *deriver.Address) {
 	rb.backend.AddrRequest(addr)
 }
 
+// AddrResponses exposes a channel that allows to consume backend's responses to
+// address requests created with AddrRequest()
 func (rb *RecorderBackend) AddrResponses() <-chan *AddrResponse {
 	return rb.addrResponses
 }
 
+// TxResponses exposes a channel that allows to consume backend's responses to
+// address requests created with addrrequest().
+// if an address has any transactions then they will be sent to this channel by the
+// backend.
 func (rb *RecorderBackend) TxResponses() <-chan *TxResponse {
 	return rb.txResponses
 }
 
+// Finish informs the backend to stop doing its work.
 func (rb *RecorderBackend) Finish() {
 	rb.backend.Finish()
 	close(rb.doneCh)

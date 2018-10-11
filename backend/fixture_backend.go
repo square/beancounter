@@ -60,18 +60,27 @@ func NewFixtureBackend(filepath string) (*FixtureBackend, error) {
 	return cb, nil
 }
 
+// AddrRequest schedules a request to the backend to lookup information related
+// to the given address.
 func (b *FixtureBackend) AddrRequest(addr *deriver.Address) {
 	b.addrRequests <- addr
 }
 
+// AddrResponses exposes a channel that allows to consume backend's responses to
+// address requests created with AddrRequest()
 func (b *FixtureBackend) AddrResponses() <-chan *AddrResponse {
 	return b.addrResponses
 }
 
+// TxResponses exposes a channel that allows to consume backend's responses to
+// address requests created with addrrequest().
+// if an address has any transactions then they will be sent to this channel by the
+// backend.
 func (b *FixtureBackend) TxResponses() <-chan *TxResponse {
 	return b.txResponses
 }
 
+// Finish informs the backend to stop doing its work.
 func (b *FixtureBackend) Finish() {
 	close(b.doneCh)
 }

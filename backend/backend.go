@@ -24,7 +24,6 @@ import (
 // Accounter to wait until the Backend is done with any additional requests. In theory, we could
 // forgo the Finish() method and have the Accounter read from the TxResponses channel until it has
 // all the data it needs. This would require the Accounter to maintain its own set of transactions.
-
 type Backend interface {
 	AddrRequest(addr *deriver.Address)
 	AddrResponses() <-chan *AddrResponse
@@ -39,6 +38,8 @@ type AddrResponse struct {
 	TxHashes []string
 }
 
+// TxResponse contains raw transaction, transaction hash and a block height in which
+// it was confirmed.
 type TxResponse struct {
 	Hash   string
 	Height int64
