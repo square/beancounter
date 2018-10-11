@@ -24,20 +24,19 @@ import (
 // - watch
 // - singleAddress
 var (
-	m              = kingpin.Flag("m", "number of signatures (quorum)").Short('m').Required().Int()
-	n              = kingpin.Flag("n", "number of public keys").Short('n').Required().Int()
-	account        = kingpin.Flag("account", "account number").Required().Uint32()
-	backendName    = kingpin.Flag("backend", "Personal Btcd or public Electrum nodes").Default("electrum").Enum("electrum", "btcd", "electrum-recorder", "btcd-recorder", "fixture")
-	lookahead      = kingpin.Flag("lookahead", "lookahead size").Default("100").Uint32()
-	addr           = kingpin.Flag("addr", "Electrum or btcd server").PlaceHolder("HOST:PORT").TCP()
-	rpcuser        = kingpin.Flag("rpcuser", "RPC username").PlaceHolder("USER").String()
-	rpcpass        = kingpin.Flag("rpcpass", "RPC password").PlaceHolder("PASSWORD").String()
-	debug          = kingpin.Flag("debug", "debug output").Default("false").Bool()
-	findAddr       = kingpin.Flag("find-addr", "finds the offset of an address").String()
-	maxBlockHeight = kingpin.Flag("max-block-height", "finds the offset of an address").Default("0").Int64()
-	singleAddress  = kingpin.Flag("single-address", "for debugging purpose").String()
-	cache          = kingpin.Flag("cache", "use cache").Default("false").Bool()
-	fixtureFile    = kingpin.Flag("fixture-file", "fixture file to use for recording data or reading from").PlaceHolder("FILEPATH").String()
+	m             = kingpin.Flag("m", "number of signatures (quorum)").Short('m').Required().Int()
+	n             = kingpin.Flag("n", "number of public keys").Short('n').Required().Int()
+	account       = kingpin.Flag("account", "account number").Required().Uint32()
+	backendName   = kingpin.Flag("backend", "electrum | btcd | electrum-recorder | btcd-recorder | fixture").Default("electrum").Enum("electrum", "btcd", "electrum-recorder", "btcd-recorder", "fixture")
+	lookahead     = kingpin.Flag("lookahead", "lookahead size").Default("100").Uint32()
+	addr          = kingpin.Flag("addr", "backend to connect to initially").PlaceHolder("HOST:PORT").TCP()
+	rpcUser       = kingpin.Flag("rpcuser", "RPC username").PlaceHolder("USER").String()
+	rpcPass       = kingpin.Flag("rpcpass", "RPC password").PlaceHolder("PASSWORD").String()
+	debug         = kingpin.Flag("debug", "debug output").Default("false").Bool()
+	findAddr      = kingpin.Flag("find-addr", "finds the offset of an address").String()
+	blockHeight   = kingpin.Flag("block-height", "compute balance at given block height").Default("0").Int64()
+	singleAddress = kingpin.Flag("single-address", "for debugging purpose").String()
+	fixtureFile   = kingpin.Flag("fixture-file", "fixture file to use for recording data or reading from").PlaceHolder("FILEPATH").String()
 )
 
 func main() {
@@ -112,11 +111,11 @@ func main() {
 	backend, err := buildBackend(network)
 	PanicOnError(err)
 
-	// TODO: if maxBlockHeight is 0, we should default to current height - 6.
-	if *maxBlockHeight == 0 {
-		panic("maxBlockHeight not set")
+	// TODO: if blockHeight is 0, we should default to current height - 6.
+	if *blockHeight == 0 {
+		panic("blockHeight not set")
 	}
-	tb := accounter.New(backend, deriver, *lookahead, *maxBlockHeight)
+	tb := accounter.New(backend, deriver, *lookahead, *blockHeight)
 
 	balance := tb.ComputeBalance()
 
@@ -136,7 +135,7 @@ func buildBackend(network Network) (backend.Backend, error) {
 			return nil, err
 		}
 	case "btcd":
-		b, err = backend.NewBtcdBackend(*maxBlockHeight, (*addr).String(), *rpcuser, *rpcpass, network)
+		b, err = backend.NewBtcdBackend(*blockHeight, (*addr).String(), *rpcUser, *rpcPass, network)
 		if err != nil {
 			return nil, err
 		}
@@ -154,7 +153,7 @@ func buildBackend(network Network) (backend.Backend, error) {
 		if *fixtureFile == "" {
 			panic("btcd-recorder backend requires a --fixture-file to be specified, so data can be recorded.")
 		}
-		b, err = backend.NewBtcdBackend(*maxBlockHeight, (*addr).String(), *rpcuser, *rpcpass, network)
+		b, err = backend.NewBtcdBackend(*blockHeight, (*addr).String(), *rpcUser, *rpcPass, network)
 		if err != nil {
 			return nil, err
 		}
