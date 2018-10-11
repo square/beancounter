@@ -27,9 +27,8 @@ type Accounter struct {
 	xpubs     []string
 	maxHeight int64 // height at which we want to compute the balance
 
-	addresses map[string]address
-
-	transactions map[string]transaction
+	addresses    map[string]address     // map of address script => (Address, txHashes)
+	transactions map[string]transaction // map of txhash => transaction
 
 	backend   backend.Backend
 	deriver   *deriver.AddressDeriver
@@ -65,6 +64,7 @@ type vout struct {
 	value   int64 // in Satoshi. We use signed int64 so we don't have to worry about underflow.
 	address string
 	ours    bool
+	spentBy *string // txhash of spending transaction; nil for unspent transactions.
 }
 
 // New instantiates a new Accounter.
@@ -149,6 +149,7 @@ func (a *Accounter) processTransactions() {
 				value:   txout.Value,
 				address: addr,
 				ours:    exists,
+				spentBy: nil,
 			})
 		}
 
@@ -181,8 +182,7 @@ func (a *Accounter) balance() uint64 {
 	// TODO: log a warning if a change address is receiving funds from an address we don't own.
 
 	// compute all debits
-	// TODO: add a safety check against a double debit
-	for _, tx := range a.transactions {
+	for hash, tx := range a.transactions {
 		for _, txin := range tx.vin {
 			prev, exists := a.transactions[txin.prevHash]
 			if !exists {
@@ -193,6 +193,11 @@ func (a *Accounter) balance() uint64 {
 			}
 			if prev.vout[txin.index].ours {
 				balance -= prev.vout[txin.index].value
+				if prev.vout[txin.index].spentBy != nil {
+					// sanity check: an output can only be spent by one transaction.
+					panic(fmt.Sprintf("%s and %s, both spending %s", hash, *prev.vout[txin.index].spentBy, txin.prevHash))
+				}
+				prev.vout[txin.index].spentBy = &hash
 			}
 		}
 	}
