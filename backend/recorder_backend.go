@@ -15,15 +15,20 @@ import (
 // balance and transaction history information for a given address.
 // RecorderBackend implements Backend interface.
 type RecorderBackend struct {
-	backend     Backend
-	addrIndexMu sync.Mutex
-	addrIndex   map[string]AddrResponse
-	txIndexMu   sync.Mutex
-	txIndex     map[string]TxResponse
+	backend      Backend
+	addrIndexMu  sync.Mutex
+	addrIndex    map[string]AddrResponse
+	txIndexMu    sync.Mutex
+	txIndex      map[string]TxResponse
+	blockIndexMu sync.Mutex
+	blockIndex   map[uint32]BlockResponse
 
 	// channels used to communicate with the Accounter
 	addrResponses chan *AddrResponse
 	txResponses   chan *TxResponse
+
+	// channels used to communicate with the Blockfinder
+	blockResponses chan *BlockResponse
 
 	// internal channels
 	doneCh chan bool
@@ -40,8 +45,10 @@ func NewRecorderBackend(b Backend, filepath string) (*RecorderBackend, error) {
 		backend:        b,
 		addrResponses:  make(chan *AddrResponse, addrRequestsChanSize),
 		txResponses:    make(chan *TxResponse, 2*maxTxsPerAddr),
+		blockResponses: make(chan *BlockResponse, blockRequestChanSize),
 		addrIndex:      make(map[string]AddrResponse),
 		txIndex:        make(map[string]TxResponse),
+		blockIndex:     make(map[uint32]BlockResponse),
 		doneCh:         make(chan bool),
 		outputFilepath: filepath,
 	}
@@ -76,6 +83,14 @@ func (rb *RecorderBackend) TxResponses() <-chan *TxResponse {
 	return rb.txResponses
 }
 
+func (rb *RecorderBackend) BlockRequest(height uint32) {
+	rb.backend.BlockRequest(height)
+}
+
+func (rb *RecorderBackend) BlockResponses() <-chan *BlockResponse {
+	return rb.blockResponses
+}
+
 // Finish informs the backend to stop doing its work.
 func (rb *RecorderBackend) Finish() {
 	rb.backend.Finish()
@@ -93,6 +108,7 @@ func (rb *RecorderBackend) ChainHeight() uint32 {
 func (rb *RecorderBackend) processRequests() {
 	backendAddrResponses := rb.backend.AddrResponses()
 	backendTxResponses := rb.backend.TxResponses()
+	backendBlockResponses := rb.backend.BlockResponses()
 
 	for {
 		select {
@@ -114,6 +130,15 @@ func (rb *RecorderBackend) processRequests() {
 			rb.txIndex[txResp.Hash] = *txResp
 			rb.txIndexMu.Unlock()
 			rb.txResponses <- txResp
+		case block, ok := <-backendBlockResponses:
+			if !ok {
+				backendBlockResponses = nil
+				continue
+			}
+			rb.blockIndexMu.Lock()
+			rb.blockIndex[block.Height] = *block
+			rb.blockIndexMu.Unlock()
+			rb.blockResponses <- block
 		case <-rb.doneCh:
 			return
 		}
@@ -121,7 +146,10 @@ func (rb *RecorderBackend) processRequests() {
 }
 
 func (rb *RecorderBackend) writeToFile() error {
-	cachedData := index{Metadata: metadata{}, Addresses: []address{}, Transactions: []transaction{}}
+	cachedData := index{
+		Metadata: metadata{}, Addresses: []address{}, Transactions: []transaction{},
+		Blocks: []block{},
+	}
 
 	reporter.GetInstance().Logf("writing data to %s\n ...", rb.outputFilepath)
 	f, err := os.Create(rb.outputFilepath)
@@ -155,6 +183,13 @@ func (rb *RecorderBackend) writeToFile() error {
 		cachedData.Transactions = append(cachedData.Transactions, tx)
 	}
 	sort.Sort(byTransactionID(cachedData.Transactions))
+
+	for _, b := range rb.blockIndex {
+		cachedData.Blocks = append(cachedData.Blocks, block{
+			Height:    b.Height,
+			Timestamp: b.Timestamp,
+		})
+	}
 
 	cachedDataJSON, err := json.MarshalIndent(cachedData, "", "    ")
 	if err != nil {

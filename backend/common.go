@@ -2,6 +2,7 @@ package backend
 
 import (
 	"github.com/square/beancounter/utils"
+	"time"
 )
 
 // index, address and transaction and helper structs used by recorder and fixture
@@ -11,6 +12,7 @@ type index struct {
 	Metadata     metadata      `json:"metadata"`
 	Addresses    []address     `json:"addresses"`
 	Transactions []transaction `json:"transactions"`
+	Blocks       []block       `json:"blocks"`
 }
 
 type metadata struct {
@@ -43,3 +45,8 @@ type byTransactionID []transaction
 func (a byTransactionID) Len() int           { return len(a) }
 func (a byTransactionID) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a byTransactionID) Less(i, j int) bool { return a[i].Hash < a[j].Hash }
+
+type block struct {
+	Height    uint32    `json:"height"`
+	Timestamp time.Time `json:"timestamp"`
+}

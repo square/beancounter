@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"fmt"
 	"github.com/btcsuite/btcutil/hdkeychain"
+	"github.com/square/beancounter/blockfinder"
 	"log"
 	"math"
 	"net"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/square/beancounter/accounter"
 	"github.com/square/beancounter/backend"
@@ -33,7 +35,7 @@ var (
 	findAddrN   = findAddr.Flag("n", "number of public keys").Short('n').Default("1").Int()
 
 	findBlock            = app.Command("find-block", "Finds the block height for a given date/time.")
-	findBlockTimestamp   = findBlock.Arg("timestamp", "date/time to resolve. E.g. \"2006-01-02 15:04:05 MST\"").Required().String()
+	findBlockTimestamp   = findBlock.Arg("timestamp", "Date/time to resolve. E.g. \"2006-01-02 15:04:05 MST\"").Required().String()
 	findBlockBackend     = findBlock.Flag("backend", "electrum | btcd | electrum-recorder | btcd-recorder | fixture").Default("electrum").Enum("electrum", "btcd", "electrum-recorder", "btcd-recorder", "fixture")
 	findBlockAddr        = findBlock.Flag("addr", "Backend to connect to initially. Defaults to a hardcoded node for Electrum and localhost for Btcd.").PlaceHolder("HOST:PORT").TCP()
 	findBlockRpcUser     = findBlock.Flag("rpcuser", "RPC username").PlaceHolder("USER").String()
@@ -66,7 +68,7 @@ func main() {
 	case findAddr.FullCommand():
 		doFindAddr()
 	case findBlock.FullCommand():
-		panic("not yet implemented")
+		doFindBlock()
 	case computeBalance.FullCommand():
 		doComputeBalance()
 	default:
@@ -166,6 +168,21 @@ func doFindAddr() {
 	fmt.Printf("not found\n")
 }
 
+func doFindBlock() {
+	t, err := time.Parse("2006-01-02 15:04:05 MST", *findBlockTimestamp)
+	PanicOnError(err)
+
+	backend, err := findBlockBuildBackend(Mainnet)
+	PanicOnError(err)
+	bf := blockfinder.New(backend)
+	block, median, timestamp := bf.Search(t)
+	fmt.Printf("Closest block to '%s' is block #%d with a median time of '%s'\n",
+		t.String(), block, median.String())
+	if *debug {
+		fmt.Printf("timestamp: '%s'\n", timestamp.String())
+	}
+}
+
 func doComputeBalance() {
 	err := VerifyMandN(*computeBalanceM, *computeBalanceN)
 	if err != nil {
@@ -227,6 +244,57 @@ func doComputeBalance() {
 	balance := tb.ComputeBalance()
 
 	fmt.Printf("Balance: %d\n", balance)
+}
+
+// TODO: copy-pasta
+func findBlockBuildBackend(network Network) (backend.Backend, error) {
+	var b backend.Backend
+	var err error
+	switch *findBlockBackend {
+	case "electrum":
+		addr, port := getServer(network, *findBlockAddr)
+		b, err = backend.NewElectrumBackend(addr, port, network)
+		if err != nil {
+			return nil, err
+		}
+	case "btcd":
+		b, err = backend.NewBtcdBackend((**findBlockAddr).String(), *findBlockRpcUser,
+			*findBlockRpcPass, network)
+		if err != nil {
+			return nil, err
+		}
+	case "electrum-recorder":
+		if *findBlockFixtureFile == "" {
+			panic("electrum-recorder backend requires output --fixture-file.")
+		}
+		addr, port := getServer(network, *findBlockAddr)
+		b, err = backend.NewElectrumBackend(addr, port, network)
+		if err != nil {
+			return nil, err
+		}
+		b, err = backend.NewRecorderBackend(b, *findBlockFixtureFile)
+	case "btcd-recorder":
+		if *findBlockFixtureFile == "" {
+			panic("btcd-recorder backend requires output --fixture-file.")
+		}
+		b, err = backend.NewBtcdBackend((*findBlockAddr).String(), *findBlockRpcUser,
+			*findBlockRpcPass, network)
+		if err != nil {
+			return nil, err
+		}
+		b, err = backend.NewRecorderBackend(b, *findBlockFixtureFile)
+	case "fixture":
+		if *findBlockFixtureFile == "" {
+			panic("fixture backend requires input --fixture-file.")
+		}
+		b, err = backend.NewFixtureBackend(*findBlockFixtureFile)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("unreachable")
+	}
+	return b, err
 }
 
 // TODO: return *backend.Backend, error instead?

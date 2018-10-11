@@ -1,8 +1,11 @@
 package backend
 
 import (
+	"bytes"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/btcsuite/btcd/wire"
 	"log"
 	"strconv"
 	"strings"
@@ -24,12 +27,14 @@ import (
 // - has crossed the height we are interested in.
 // - we then negotiate protocol v1.2
 //
-// A background goroutine continously connects to peers.
+// A background goroutine continuously connects to peers.
 
 // ElectrumBackend wraps Electrum node and its API to provide a simple
 // balance and transaction history information for a given address.
 // ElectrumBackend implements Backend interface.
 type ElectrumBackend struct {
+	chainHeight uint32
+
 	// peer management
 	nodeMu sync.RWMutex // mutex to guard reads/writes to nodes map
 	nodes  map[string]*electrum.Node
@@ -44,13 +49,15 @@ type ElectrumBackend struct {
 	txResponses   chan *TxResponse
 	txRequests    chan string
 
+	// channels used to communicate with the Blockfinder
+	blockRequests  chan uint32
+	blockResponses chan *BlockResponse
+
 	// internal channels
 	peersRequests  chan struct{}
 	transactionsMu sync.Mutex // mutex to guard read/writes to transactions map
 	transactions   map[string]int64
 	doneCh         chan bool
-
-	chainHeight uint32
 }
 
 const (
@@ -83,6 +90,8 @@ func NewElectrumBackend(addr, port string, network utils.Network) (*ElectrumBack
 		addrResponses:    make(chan *AddrResponse, 2*maxPeers),
 		txRequests:       make(chan string, 2*maxPeers),
 		txResponses:      make(chan *TxResponse, 2*maxPeers),
+		blockRequests:    make(chan uint32, 2*maxPeers),
+		blockResponses:   make(chan *BlockResponse, 2*maxPeers),
 
 		peersRequests: make(chan struct{}),
 		transactions:  make(map[string]int64),
@@ -146,6 +155,14 @@ func (eb *ElectrumBackend) TxRequest(txHash string) {
 // backend.
 func (eb *ElectrumBackend) TxResponses() <-chan *TxResponse {
 	return eb.txResponses
+}
+
+func (eb *ElectrumBackend) BlockRequest(height uint32) {
+	eb.blockRequests <- height
+}
+
+func (eb *ElectrumBackend) BlockResponses() <-chan *BlockResponse {
+	return eb.blockResponses
 }
 
 // Finish informs the backend to stop doing its work.
@@ -292,6 +309,11 @@ func (eb *ElectrumBackend) processRequests(node *electrum.Node) {
 			if err != nil {
 				return
 			}
+		case block := <-eb.blockRequests:
+			err := eb.processBlockRequest(node, block)
+			if err != nil {
+				return
+			}
 		}
 	}
 }
@@ -354,6 +376,42 @@ func (eb *ElectrumBackend) getTxHeight(txHash string) (int64, error) {
 		return -1, fmt.Errorf("no block height information for transaction %s yet", txHash)
 	}
 	return height, nil
+}
+
+// note: we could be more efficient and batch things up.
+func (eb *ElectrumBackend) processBlockRequest(node *electrum.Node, height uint32) error {
+	block, err := node.BlockchainBlockHeaders(height, 1)
+	if err != nil {
+		log.Printf("processBlockRequest failed with: %s, %+v", node.Ident, err)
+		eb.removeNode(node.Ident)
+
+		// requeue request
+		// TODO: we should have a retry counter and fail gracefully if an address fails too
+		// many times.
+		eb.blockRequests <- height
+		return err
+	}
+
+	// Decode hex to get Timestamp
+	b, err := hex.DecodeString(block.Hex)
+	if err != nil {
+		fmt.Printf("failed to unhex block %d: %s\n", height, block.Hex)
+		panic(err)
+	}
+
+	var blockHeader wire.BlockHeader
+	err = blockHeader.Deserialize(bytes.NewReader(b))
+	if err != nil {
+		fmt.Printf("failed to parse block %d: %s\n", height, block.Hex)
+		panic(err)
+	}
+
+	eb.blockResponses <- &BlockResponse{
+		Height:    height,
+		Timestamp: blockHeader.Timestamp,
+	}
+
+	return nil
 }
 
 func (eb *ElectrumBackend) processAddrRequest(node *electrum.Node, addr *deriver.Address) error {
