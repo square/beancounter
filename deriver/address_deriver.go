@@ -38,6 +38,8 @@ type Address struct {
 	addrIndex uint32
 }
 
+// NewAddress creates a new instance of Address, given network, derivation path,
+// change value and address index.
 func NewAddress(path, addr string, net Network, change, addrIndex uint32) *Address {
 	return &Address{path: path, addr: addr, net: net, change: change, addrIndex: addrIndex}
 }

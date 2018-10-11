@@ -3,6 +3,9 @@ package accounter
 import (
 	"testing"
 
+	"github.com/square/beancounter/backend/backendtest"
+	"github.com/square/beancounter/deriver"
+	"github.com/square/beancounter/utils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -84,4 +87,14 @@ func TestProcessTransactions(t *testing.T) {
 		address: "76a9146d17f31f8cef7831b87896402bf2986d4361afb988ac",
 		ours:    false,
 	})
+}
+
+func TestComputeBalanceTestnet(t *testing.T) {
+	pubs := []string{"tpubD8L6UhrL8ML9Ao47k4pmdvUoiA6QUJVzrJ9BXLgU9idRKnvdRFGgjcxmVxojWGvCcjMi6QWCp8uMpCwWdSFRDNJ7utizxLy27sVWXQT4Jz7"}
+	deriver := deriver.NewAddressDeriver(utils.Testnet, pubs, 1, 1234, "")
+	b, err := backendtest.NewFixture("testdata/tpub_data.json")
+	assert.NoError(t, err)
+	a := New(b, deriver, 100, 1435169)
+
+	assert.Equal(t, uint64(267893477), a.ComputeBalance())
 }
