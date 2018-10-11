@@ -46,6 +46,14 @@ func main() {
 
 	if *debug {
 		electrum.DebugMode = true
+	} else {
+		// Disallow piping to prevent leaking addresses in bash history, etc.
+		stat, err := os.Stdin.Stat()
+		PanicOnError(err)
+		if (stat.Mode() & os.ModeCharDevice) == 0 {
+			fmt.Println("Piping stdin forbidden.")
+			return
+		}
 	}
 
 	if *m <= 0 {
