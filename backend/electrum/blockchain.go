@@ -185,9 +185,9 @@ func (n *Node) ServerFeatures() (*Feature, error) {
 // exist before v1.2
 //
 // http://docs.electrum.org/en/latest/protocol.html#server-version
-func (n *Node) ServerVersion() error {
+func (n *Node) ServerVersion(ver string) error {
 	var ignored []string
-	return n.request("server.version", []interface{}{"beancounter", "1.2"}, &ignored)
+	return n.request("server.version", []interface{}{"beancounter", ver}, &ignored)
 }
 
 // BlockchainAddressGetHistory returns the history of an address.
