@@ -203,33 +203,6 @@ func (n *Node) BlockchainAddressGetHistory(address string) ([]*Transaction, erro
 	return result, nil
 }
 
-// MarshalJSON provides a custom Marshal method for Vin.
-func (v *Vin) MarshalJSON() ([]byte, error) {
-	if v.IsCoinBase() {
-		coinbaseStruct := struct {
-			Coinbase string `json:"coinbase"`
-			Sequence uint32 `json:"sequence"`
-		}{
-			Coinbase: v.Coinbase,
-			Sequence: v.Sequence,
-		}
-		return json.Marshal(coinbaseStruct)
-	}
-
-	txStruct := struct {
-		Txid      string     `json:"txid"`
-		Vout      uint32     `json:"vout"`
-		ScriptSig *ScriptSig `json:"scriptSig"`
-		Sequence  uint32     `json:"sequence"`
-	}{
-		Txid:      v.Txid,
-		Vout:      v.Vout,
-		ScriptSig: v.ScriptSig,
-		Sequence:  v.Sequence,
-	}
-	return json.Marshal(txStruct)
-}
-
 // BlockchainTransactionGet returns a raw transaction.
 //
 // https://electrumx.readthedocs.io/en/latest/protocol-methods.html#blockchain-transaction-get
