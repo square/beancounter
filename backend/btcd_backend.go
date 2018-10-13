@@ -25,13 +25,14 @@ type BtcdBackend struct {
 	// channels used to communicate with the Accounter
 	addrRequests  chan *deriver.Address
 	addrResponses chan *AddrResponse
+	txRequests    chan string
 	txResponses   chan *TxResponse
 
-	// internal channels
-	transactionsMu sync.Mutex // mutex to guard read/writes to transactions map
-	transactions   map[string]int64
-
 	chainHeight uint32
+	// internal channels
+	transactionsMu     sync.Mutex // mutex to guard read/writes to transactions map
+	cachedTransactions map[string]*TxResponse
+	doneCh             chan bool
 }
 
 const (
@@ -79,14 +80,16 @@ func NewBtcdBackend(hostPort, user, pass string, network utils.Network) (*BtcdBa
 	}
 
 	b := &BtcdBackend{
-		client:            client,
-		network:           network,
-		addrRequests:      make(chan *deriver.Address, addrRequestsChanSize),
-		addrResponses:     make(chan *AddrResponse, addrRequestsChanSize),
-		txResponses:       make(chan *TxResponse, 2*maxTxsPerAddr),
-		blockHeightLookup: make(map[string]int64),
-		transactions:      make(map[string]int64),
-		chainHeight:       uint32(height),
+		client:             client,
+		network:            network,
+		chainHeight:        uint32(height),
+		addrRequests:       make(chan *deriver.Address, addrRequestsChanSize),
+		addrResponses:      make(chan *AddrResponse, addrRequestsChanSize),
+		txRequests:         make(chan string, 2*maxTxsPerAddr),
+		txResponses:        make(chan *TxResponse, 2*maxTxsPerAddr),
+		blockHeightLookup:  make(map[string]int64),
+		cachedTransactions: make(map[string]*TxResponse),
+		doneCh:             make(chan bool),
 	}
 
 	// launch
@@ -100,7 +103,7 @@ func NewBtcdBackend(hostPort, user, pass string, network utils.Network) (*BtcdBa
 // to the given address.
 func (b *BtcdBackend) AddrRequest(addr *deriver.Address) {
 	reporter.GetInstance().IncAddressesScheduled()
-	reporter.GetInstance().Log(fmt.Sprintf("scheduling address: %s", addr))
+	reporter.GetInstance().Logf("scheduling address: %s", addr)
 	b.addrRequests <- addr
 }
 
@@ -108,6 +111,14 @@ func (b *BtcdBackend) AddrRequest(addr *deriver.Address) {
 // address requests created with AddrRequest()
 func (b *BtcdBackend) AddrResponses() <-chan *AddrResponse {
 	return b.addrResponses
+}
+
+// TxRequest schedules a request to the backend to lookup information related
+// to the given transaction hash.
+func (b *BtcdBackend) TxRequest(txHash string) {
+	reporter.GetInstance().IncTxScheduled()
+	reporter.GetInstance().Logf("scheduling tx: %s", txHash)
+	b.txRequests <- txHash
 }
 
 // TxResponses exposes a channel that allows to consume backend's responses to
@@ -120,7 +131,7 @@ func (b *BtcdBackend) TxResponses() <-chan *TxResponse {
 
 // Finish informs the backend to stop doing its work.
 func (b *BtcdBackend) Finish() {
-	close(b.addrResponses)
+	close(b.doneCh)
 	b.client.Disconnect()
 }
 
@@ -129,10 +140,20 @@ func (b *BtcdBackend) ChainHeight() uint32 {
 }
 
 func (b *BtcdBackend) processRequests() {
-	for addr := range b.addrRequests {
-		err := b.processAddrRequest(addr)
-		if err != nil {
-			panic(fmt.Sprintf("processAddrRequest failed: %+v", err))
+	for {
+		select {
+		case addr := <-b.addrRequests:
+			err := b.processAddrRequest(addr)
+			if err != nil {
+				panic(fmt.Sprintf("processAddrRequest failed: %+v", err))
+			}
+		case tx := <-b.txRequests:
+			err := b.processTxRequest(tx)
+			if err != nil {
+				panic(fmt.Sprintf("processTxRequest failed: %+v", err))
+			}
+		case <-b.doneCh:
+			break
 		}
 	}
 }
@@ -147,7 +168,8 @@ func (b *BtcdBackend) processAddrRequest(address *deriver.Address) error {
 				// the address doesn't exist in the blockchain - either because it was not used
 				// or given backend doesn't have a complete blockchain
 				b.addrResponses <- &AddrResponse{
-					Address: address,
+					Address:  address,
+					TxHashes: []string{},
 				}
 				return nil
 			}
@@ -164,7 +186,7 @@ func (b *BtcdBackend) processAddrRequest(address *deriver.Address) error {
 		txHashes = append(txHashes, tx.Txid)
 	}
 
-	go b.scheduleTx(txs)
+	b.cacheTxs(txs)
 
 	b.addrResponses <- &AddrResponse{
 		Address:  address,
@@ -174,10 +196,48 @@ func (b *BtcdBackend) processAddrRequest(address *deriver.Address) error {
 	return nil
 }
 
-func (b *BtcdBackend) scheduleTx(txs []*btcjson.SearchRawTransactionsResult) {
+func (b *BtcdBackend) processTxRequest(txHash string) error {
+	b.transactionsMu.Lock()
+	tx, exists := b.cachedTransactions[txHash]
+	b.transactionsMu.Unlock()
+
+	if exists {
+		b.txResponses <- tx
+
+		return nil
+	}
+
+	hash, err := chainhash.NewHashFromStr(txHash)
+	if err != nil {
+		return err
+	}
+	txResp, err := b.client.GetRawTransactionVerbose(hash)
+	if err != nil {
+		if jerr, ok := err.(*btcjson.RPCError); ok {
+			switch jerr.Code {
+			case btcjson.ErrRPCInvalidAddressOrKey:
+				return errors.Wrap(err, "blockchain doesn't have transaction "+txHash)
+			}
+		}
+		return errors.Wrap(err, "could not fetch transaction "+txHash)
+	}
+	height, err := b.getBlockHeight(txResp.BlockHash)
+	if err != nil {
+		return err
+	}
+
+	b.txResponses <- &TxResponse{
+		Hash:   txHash,
+		Height: height,
+		Hex:    txResp.Hex,
+	}
+	return nil
+}
+
+func (b *BtcdBackend) cacheTxs(txs []*btcjson.SearchRawTransactionsResult) {
 	for _, tx := range txs {
 		b.transactionsMu.Lock()
-		_, exists := b.transactions[tx.Txid]
+		_, exists := b.cachedTransactions[tx.Txid]
 		b.transactionsMu.Unlock()
 
 		if exists {
@@ -190,29 +250,13 @@ func (b *BtcdBackend) scheduleTx(txs []*btcjson.SearchRawTransactionsResult) {
 		}
 
 		b.transactionsMu.Lock()
-		b.transactions[tx.Txid] = height
-		b.transactionsMu.Unlock()
-
-		reporter.GetInstance().IncTxScheduled()
-		reporter.GetInstance().Log(fmt.Sprintf("scheduling tx: %s", tx.Txid))
-
-		b.txResponses <- &TxResponse{
+		b.cachedTransactions[tx.Txid] = &TxResponse{
 			Hash:   tx.Txid,
-			Height: b.getTxHeight(tx.Txid),
+			Height: height,
 			Hex:    tx.Hex,
 		}
+		b.transactionsMu.Unlock()
 	}
-}
-
-func (b *BtcdBackend) getTxHeight(txHash string) int64 {
-	b.transactionsMu.Lock()
-	defer b.transactionsMu.Unlock()
-
-	height, exists := b.transactions[txHash]
-	if !exists {
-		panic(fmt.Sprintf("inconsistent cache: %s", txHash))
-	}
-	return height
 }
 
 // getBlockHeight returns a block height for a given block hash or returns an error
@@ -230,7 +274,13 @@ func (b *BtcdBackend) getBlockHeight(hash string) (int64, error) {
 	}
 	resp, err := b.client.GetBlockVerbose(h)
 	if err != nil {
-		return -1, err
+		if jerr, ok := err.(*btcjson.RPCError); ok {
+			switch jerr.Code {
+			case btcjson.ErrRPCInvalidAddressOrKey:
+				return -1, errors.Wrap(err, "blockchain doesn't have block "+hash)
+			}
+		}
+		return -1, errors.Wrap(err, "could not fetch block "+hash)
 	}
 
 	b.blockHeightMu.Lock()

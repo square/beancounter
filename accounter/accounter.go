@@ -34,10 +34,12 @@ type Accounter struct {
 	deriver   *deriver.AddressDeriver
 	lookahead uint32
 
-	countMu       sync.Mutex // protects lastAddresses, derivedCount and checkedCount
-	lastAddresses [2]uint32
-	derivedCount  uint32
-	checkedCount  uint32
+	countMu            sync.Mutex // protects lastAddresses, derivedAddrCount and processedAddrCount
+	lastAddresses      [2]uint32
+	derivedAddrCount   uint32
+	processedAddrCount uint32
+	seenTxCount        uint32
+	processedTxCount   uint32
 
 	addrResponses <-chan *backend.AddrResponse
 	txResponses   <-chan *backend.TxResponse
@@ -112,10 +114,12 @@ func (a *Accounter) processTransactions() {
 	for hash, tx := range a.transactions {
 		// remove transactions which are too recent
 		if tx.height > int64(a.blockHeight) {
+			reporter.GetInstance().Logf("transaction %s has height %d > BLOCK HEIGHT (%d)", hash, tx.height, a.blockHeight)
 			delete(a.transactions, hash)
 		}
 		// remove transactions which haven't been mined
 		if tx.height <= 0 {
+			reporter.GetInstance().Logf("transaction %s has not been mined, yet (height=%d)", hash, tx.height)
 			delete(a.transactions, hash)
 		}
 	}
@@ -223,7 +227,7 @@ func (a *Accounter) sendWork() {
 				// increment the number of addresses which have been derived
 				addr := a.deriver.Derive(change, indexes[change])
 				a.countMu.Lock()
-				a.derivedCount++
+				a.derivedAddrCount++
 				a.countMu.Unlock()
 				a.backend.AddrRequest(addr)
 				indexes[change]++
@@ -248,7 +252,7 @@ func (a *Accounter) recvWork() {
 			reporter.GetInstance().IncAddressesFetched()
 
 			a.countMu.Lock()
-			a.checkedCount++
+			a.processedAddrCount++
 			a.countMu.Unlock()
 
 			a.addresses[resp.Address.Script()] = address{
@@ -256,7 +260,16 @@ func (a *Accounter) recvWork() {
 				txHashes: resp.TxHashes,
 			}
 
-			reporter.GetInstance().Log(fmt.Sprintf("address %s has %d transactions", resp.Address, len(resp.TxHashes)))
+			a.countMu.Lock()
+			for _, txHash := range resp.TxHashes {
+				if _, exists := a.transactions[txHash]; !exists {
+					a.backend.TxRequest(txHash)
+					a.seenTxCount++
+				}
+			}
+			a.countMu.Unlock()
+
+			reporter.GetInstance().Logf("address %s has %d transactions", resp.Address, len(resp.TxHashes))
 
 			if resp.HasTransactions() {
 				a.countMu.Lock()
@@ -271,6 +284,10 @@ func (a *Accounter) recvWork() {
 			}
 
 			reporter.GetInstance().IncTxFetched()
+
+			a.countMu.Lock()
+			a.processedTxCount++
+			a.countMu.Unlock()
 
 			tx := transaction{
 				height: resp.Height,
@@ -303,6 +320,10 @@ func (a *Accounter) complete() bool {
 	defer a.countMu.Unlock()
 
 	// We are done when the right number of addresses were scheduled, fetched and processed
+	// *and* all the transactions that were seen have been scheduled, fetched and processed.
 	indexes := a.lastAddresses[0] + a.lastAddresses[1]
-	return a.derivedCount == indexes && a.checkedCount == indexes
+	addrsDone := a.derivedAddrCount == indexes && a.processedAddrCount == indexes
+	txsDone := a.seenTxCount == a.processedTxCount
+
+	return addrsDone && txsDone
 }

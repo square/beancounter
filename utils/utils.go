@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+
 	"github.com/btcsuite/btcd/chaincfg"
 )
 
