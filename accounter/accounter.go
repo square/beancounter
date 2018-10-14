@@ -22,10 +22,10 @@ import (
 // - We don't track fees. I.e. we don't answer the question: how much have we spent in fees. It
 //   shouldn't be hard to answer that question.
 type Accounter struct {
-	account   string
-	net       Network
-	xpubs     []string
-	maxHeight int64 // height at which we want to compute the balance
+	account     string
+	net         Network
+	xpubs       []string
+	blockHeight uint32 // height at which we want to compute the balance
 
 	addresses    map[string]address     // map of address script => (Address, txHashes)
 	transactions map[string]transaction // map of txhash => transaction
@@ -69,9 +69,9 @@ type vout struct {
 
 // New instantiates a new Accounter.
 // TODO: find a better way to pass options to the NewCounter. Maybe thru a config or functional option params?
-func New(b backend.Backend, addressDeriver *deriver.AddressDeriver, lookahead uint32, maxHeight int64) *Accounter {
+func New(b backend.Backend, addressDeriver *deriver.AddressDeriver, lookahead uint32, blockHeight uint32) *Accounter {
 	a := &Accounter{
-		maxHeight:     maxHeight,
+		blockHeight:   blockHeight,
 		backend:       b,
 		deriver:       addressDeriver,
 		lookahead:     lookahead,
@@ -111,11 +111,11 @@ func (a *Accounter) fetchTransactions() {
 func (a *Accounter) processTransactions() {
 	for hash, tx := range a.transactions {
 		// remove transactions which are too recent
-		if tx.height > a.maxHeight {
+		if tx.height > int64(a.blockHeight) {
 			delete(a.transactions, hash)
 		}
 		// remove transactions which haven't been mined
-		if tx.height == 0 {
+		if tx.height <= 0 {
 			delete(a.transactions, hash)
 		}
 	}

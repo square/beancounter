@@ -7,17 +7,19 @@ import (
 // Backend is an interface which abstracts different types of backends.
 //
 // The Backends are responsible for fetching all the transactions related to an address.
-// For each transaction, the Backend must also grab:
+// For each transaction, the Backend must grab:
 // - the height
 // - the raw transaction bytes
 //
-// The Backend doesn't keep much state. It pushes the data in the AddrResponses and TxResponses
-// channels, which the Accounter reads from. A given transaction can (and often does) involve
-// multiple addresses from the same wallet. The Backend maintains a small map to dedup fetches.
+// In addition, the backend must know the chain height. The backend is allowed to fetch this value
+// once (at startup) and cache it.
+//
+// In general, we tried to keep the backends minimal and move as much (common) logic as possible
+// into the accounter.
 //
 // There are a few differences between Electrum and Btcd (and potentially any other Backend we
-// decide to add in the future). For instance, Electrum returns  the block height when fetching all
-// the transactions for a given address, but Btcd doesn't. On  the other hand, Btcd returns the raw
+// decide to add in the future). For instance, Electrum returns the block height when fetching all
+// the transactions for a given address, but Btcd doesn't. On the other hand, Btcd returns the raw
 // transaction information right away but Electrum requires additional requests.
 //
 // Because of these differences, the Backend exposes a Finish() method. This method allows the
@@ -28,6 +30,8 @@ type Backend interface {
 	AddrRequest(addr *deriver.Address)
 	AddrResponses() <-chan *AddrResponse
 	TxResponses() <-chan *TxResponse
+
+	ChainHeight() uint32
 
 	Finish()
 }

@@ -32,6 +32,8 @@ type FixtureBackend struct {
 	doneCh chan bool
 
 	readOnly bool
+
+	height uint32
 }
 
 // NewFixtureBackend returns a new FixtureBackend structs or errors.
@@ -83,6 +85,10 @@ func (b *FixtureBackend) TxResponses() <-chan *TxResponse {
 // Finish informs the backend to stop doing its work.
 func (b *FixtureBackend) Finish() {
 	close(b.doneCh)
+}
+
+func (b *FixtureBackend) ChainHeight() uint32 {
+	return b.height
 }
 
 func (b *FixtureBackend) processRequests() {
@@ -166,6 +172,8 @@ func (b *FixtureBackend) loadFromFile(f *os.File) error {
 	if err != nil {
 		return err
 	}
+
+	b.height = cachedData.Metadata.Height
 
 	for _, addr := range cachedData.Addresses {
 		a := AddrResponse{

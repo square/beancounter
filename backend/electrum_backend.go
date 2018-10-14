@@ -49,6 +49,8 @@ type ElectrumBackend struct {
 	transactionsMu sync.Mutex // mutex to guard read/writes to transactions map
 	transactions   map[string]int64
 	doneCh         chan bool
+
+	chainHeight uint32
 }
 
 const (
@@ -86,6 +88,15 @@ func NewElectrumBackend(addr, port string, network utils.Network) (*ElectrumBack
 		transactions:  make(map[string]int64),
 		doneCh:        make(chan bool),
 	}
+
+	// Connect to a node to fetch the height
+	height, err := eb.getHeight(addr, port, network)
+	if err != nil {
+		return nil, err
+	}
+	eb.chainHeight = height
+
+	// Connect to a node and handle requests
 	if err := eb.addNode(addr, port, network); err != nil {
 		fmt.Printf("failed to connect to initial node: %+v", err)
 		return nil, err
@@ -135,6 +146,10 @@ func (eb *ElectrumBackend) Finish() {
 	eb.removeAllNodes()
 	// TODO: we could gracefully disconnect from all the nodes. We currently don't, because the
 	// program is going to terminate soon anyways.
+}
+
+func (eb *ElectrumBackend) ChainHeight() uint32 {
+	return eb.chainHeight
 }
 
 // Connect to a node and add it to the map of nodes
@@ -206,7 +221,49 @@ func (eb *ElectrumBackend) addNode(addr, port string, network utils.Network) err
 
 	// We can process requests
 	go eb.processRequests(node)
+
 	return nil
+}
+
+// Connect to a node without registering it, fetch height and disconnect.
+func (eb *ElectrumBackend) getHeight(addr, port string, network utils.Network) (uint32, error) {
+	log.Printf("connecting to %s", addr)
+	node, err := electrum.NewNode(addr, port, network)
+	if err != nil {
+		return 0, err
+	}
+	defer node.Disconnect()
+
+	// Get the server's features
+	feature, err := node.ServerFeatures()
+	if err != nil {
+		return 0, err
+	}
+	// Check genesis block
+	if feature.Genesis != utils.GenesisBlock(network) {
+		return 0, ErrIncorrectGenesisBlock
+	}
+	// TODO: check pruning. Currently, servers currently don't prune, so it's fine to skip for now.
+
+	// Check version
+	err = checkVersion(feature.Protocol)
+	if err != nil {
+		return 0, err
+	}
+
+	// Negotiate version
+	err = node.ServerVersion("1.2")
+	if err != nil {
+		return 0, ErrFailedNegotiateVersion
+	}
+
+	header, err := node.BlockchainHeadersSubscribe()
+	if err != nil {
+		log.Printf("BlockchainHeadersSubscribe failed: %+v", err)
+		return 0, err
+	}
+
+	return header.Height, nil
 }
 
 func (eb *ElectrumBackend) processRequests(node *electrum.Node) {
