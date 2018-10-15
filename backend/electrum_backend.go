@@ -189,7 +189,7 @@ func (eb *ElectrumBackend) addNode(addr, port string, network utils.Network) err
 	}
 
 	// Negotiate version
-	err = node.ServerVersion()
+	err = node.ServerVersion("1.2")
 	if err != nil {
 		eb.nodeMu.Lock()
 		eb.blacklistedNodes[ident] = struct{}{}
