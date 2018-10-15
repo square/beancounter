@@ -66,6 +66,16 @@ func NewBtcdBackend(maxBlockHeight int64, hostPort, user, pass string, network u
 		return nil, errors.Wrap(err, "could not create a Btcd RPC client")
 	}
 
+	// Check that we are talking to the right chain
+	genesis, err := client.GetBlockHash(0)
+	if err != nil {
+		return nil, errors.Wrap(err, "GetBlockHash(0) failed")
+	}
+	if genesis.String() != utils.GenesisBlock(network) {
+		return nil, errors.New(fmt.Sprintf("Unexpected genesis block %s != %s", genesis.String(), utils.GenesisBlock(network)))
+	}
+	fmt.Printf("%+v\n", genesis)
+
 	actualMaxHeight, err := client.GetBlockCount()
 	maxAllowedHeight := actualMaxHeight - minConfirmations
 	if err != nil {
