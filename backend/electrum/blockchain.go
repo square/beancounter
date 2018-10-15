@@ -171,6 +171,7 @@ func (v *Vin) IsCoinBase() bool {
 // ServerFeatures returns the server features dictionary.
 // method: "server.features"
 //
+// version 1.1
 // https://electrumx.readthedocs.io/en/latest/protocol-methods.html#server-features
 func (n *Node) ServerFeatures() (*Feature, error) {
 	var result Feature
@@ -181,19 +182,20 @@ func (n *Node) ServerFeatures() (*Feature, error) {
 	return &result, nil
 }
 
-// ServerVersion allows negotiating a min protocol version. This is required, as some methods didn't
-// exist before v1.2
+// ServerVersion allows negotiating a min protocol version. This is required, as various methods
+// appeared (or were removed) in various versions.
 //
-// http://docs.electrum.org/en/latest/protocol.html#server-version
+// version 1.1
+// https://electrumx.readthedocs.io/en/latest/protocol-methods.html#server-version
 func (n *Node) ServerVersion(ver string) error {
 	var ignored []string
 	return n.request("server.version", []interface{}{"beancounter", ver}, &ignored)
 }
 
 // BlockchainAddressGetHistory returns the history of an address.
-// Available(version < 1.3)
 //
-// http://docs.electrum.org/en/latest/protocol.html#blockchain-address-get-history
+// version 1.1 and version 1.2 only
+// https://electrumx.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get_history
 func (n *Node) BlockchainAddressGetHistory(address string) ([]*Transaction, error) {
 	var result []*Transaction
 	err := n.request("blockchain.address.get_history", []interface{}{address}, &result)
