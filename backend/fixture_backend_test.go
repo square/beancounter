@@ -95,8 +95,13 @@ func TestAddressWithTransactions(t *testing.T) {
 	assert.Len(t, addrs[0].TxHashes, 2)
 	assert.Contains(t, addrs[0].TxHashes, "5554c15d13002786a70a7151aad4eddce76633c60bc7f90e3dc70eb4f9c4b2b0")
 	assert.Contains(t, addrs[0].TxHashes, "bd09a74381ffad78c162976ec27fc9c1dceda3c2bfe367541a7140b8dd6e1f4c")
-	assert.Len(t, txs, 2)
+	assert.Len(t, txs, 0)
 
+	for _, tx := range addrs[0].TxHashes {
+		b.TxRequest(tx)
+	}
+
+	fetchResults(b, &addrs, &txs, 100*time.Millisecond)
 	// ensure that txs contain the same transaction hashes as addrs[0].TxHashes
 	var txHashes []string
 	txHashes = append(txHashes, txs[0].Hash)

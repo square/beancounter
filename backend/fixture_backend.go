@@ -2,7 +2,6 @@ package backend
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"sync"
@@ -23,6 +22,7 @@ type FixtureBackend struct {
 	// channels used to communicate with the Accounter
 	addrRequests  chan *deriver.Address
 	addrResponses chan *AddrResponse
+	txRequests    chan string
 	txResponses   chan *TxResponse
 
 	transactionsMu sync.Mutex // mutex to guard read/writes to transactions map
@@ -41,6 +41,7 @@ func NewFixtureBackend(filepath string) (*FixtureBackend, error) {
 	cb := &FixtureBackend{
 		addrRequests:  make(chan *deriver.Address, 10),
 		addrResponses: make(chan *AddrResponse, 10),
+		txRequests:    make(chan string, 1000),
 		txResponses:   make(chan *TxResponse, 1000),
 		addrIndex:     make(map[string]AddrResponse),
 		txIndex:       make(map[string]TxResponse),
@@ -65,7 +66,17 @@ func NewFixtureBackend(filepath string) (*FixtureBackend, error) {
 // AddrRequest schedules a request to the backend to lookup information related
 // to the given address.
 func (b *FixtureBackend) AddrRequest(addr *deriver.Address) {
+	reporter.GetInstance().IncAddressesScheduled()
+	reporter.GetInstance().Logf("[fixture] scheduling address: %s", addr)
 	b.addrRequests <- addr
+}
+
+// TxRequest schedules a request to the backend to lookup information related
+// to the given transaction hash.
+func (b *FixtureBackend) TxRequest(txHash string) {
+	reporter.GetInstance().IncTxScheduled()
+	reporter.GetInstance().Logf("[fixture] scheduling tx: %s", txHash)
+	b.txRequests <- txHash
 }
 
 // AddrResponses exposes a channel that allows to consume backend's responses to
@@ -96,6 +107,8 @@ func (b *FixtureBackend) processRequests() {
 		select {
 		case addr := <-b.addrRequests:
 			b.processAddrRequest(addr)
+		case tx := <-b.txRequests:
+			b.processTxRequest(tx)
 		case addrResp, ok := <-b.addrResponses:
 			if !ok {
 				b.addrResponses = nil
@@ -114,50 +127,33 @@ func (b *FixtureBackend) processRequests() {
 	}
 }
 
-func (b *FixtureBackend) processAddrRequest(address *deriver.Address) {
+func (b *FixtureBackend) processAddrRequest(addr *deriver.Address) {
 	b.addrIndexMu.Lock()
-	resp, exists := b.addrIndex[address.String()]
+	resp, exists := b.addrIndex[addr.String()]
 	b.addrIndexMu.Unlock()
-
-	reporter.GetInstance().IncAddressesScheduled()
-	reporter.GetInstance().Log(fmt.Sprintf("[fixture] scheduling address: %s", address))
 
 	if exists {
 		b.addrResponses <- &resp
-		go b.scheduleTx(resp.TxHashes)
 		return
 	}
 
 	// assuming that address has not been used
 	b.addrResponses <- &AddrResponse{
-		Address: address,
+		Address: addr,
 	}
 }
 
-func (b *FixtureBackend) scheduleTx(txIDs []string) {
-	for _, txid := range txIDs {
-		b.transactionsMu.Lock()
-		_, exists := b.transactions[txid]
-		b.transactionsMu.Unlock()
+func (b *FixtureBackend) processTxRequest(txHash string) {
+	b.txIndexMu.Lock()
+	resp, exists := b.txIndex[txHash]
+	b.txIndexMu.Unlock()
 
-		if exists {
-			return
-		}
-
-		b.txIndexMu.Lock()
-		tx, exists := b.txIndex[txid]
-		b.txIndexMu.Unlock()
-
-		// if cached address lists a transaction that doesn't exist in cache,
-		// then something is wrong.
-		if !exists {
-			panic(fmt.Sprintf("inconsistent cache: %s", txid))
-		}
-		reporter.GetInstance().IncTxScheduled()
-		reporter.GetInstance().Log(fmt.Sprintf("[fixture] scheduling tx: %s", txid))
-
-		b.txResponses <- &tx
+	if exists {
+		b.txResponses <- &resp
+		return
 	}
+
+	// assuming that transaction does not exist in the fixture file
 }
 
 func (b *FixtureBackend) loadFromFile(f *os.File) error {
@@ -189,6 +185,8 @@ func (b *FixtureBackend) loadFromFile(f *os.File) error {
 			Height: tx.Height,
 			Hex:    tx.Hex,
 		}
+
+		b.transactions[tx.Hash] = tx.Height
 	}
 
 	return nil

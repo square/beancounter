@@ -42,10 +42,10 @@ type ElectrumBackend struct {
 	addrRequests  chan *deriver.Address
 	addrResponses chan *AddrResponse
 	txResponses   chan *TxResponse
+	txRequests    chan string
 
 	// internal channels
 	peersRequests  chan struct{}
-	txRequests     chan string
 	transactionsMu sync.Mutex // mutex to guard read/writes to transactions map
 	transactions   map[string]int64
 	doneCh         chan bool
@@ -81,10 +81,10 @@ func NewElectrumBackend(addr, port string, network utils.Network) (*ElectrumBack
 		network:          network,
 		addrRequests:     make(chan *deriver.Address, 2*maxPeers),
 		addrResponses:    make(chan *AddrResponse, 2*maxPeers),
+		txRequests:       make(chan string, 2*maxPeers),
 		txResponses:      make(chan *TxResponse, 2*maxPeers),
 
 		peersRequests: make(chan struct{}),
-		txRequests:    make(chan string, 2*maxPeers),
 		transactions:  make(map[string]int64),
 		doneCh:        make(chan bool),
 	}
@@ -122,7 +122,7 @@ func NewElectrumBackend(addr, port string, network utils.Network) (*ElectrumBack
 // to the given address.
 func (eb *ElectrumBackend) AddrRequest(addr *deriver.Address) {
 	reporter.GetInstance().IncAddressesScheduled()
-	reporter.GetInstance().Log(fmt.Sprintf("scheduling address: %s", addr))
+	reporter.GetInstance().Logf("scheduling address: %s", addr)
 	eb.addrRequests <- addr
 }
 
@@ -130,6 +130,14 @@ func (eb *ElectrumBackend) AddrRequest(addr *deriver.Address) {
 // address requests created with AddrRequest()
 func (eb *ElectrumBackend) AddrResponses() <-chan *AddrResponse {
 	return eb.addrResponses
+}
+
+// TxRequest schedules a request to the backend to lookup information related
+// to the given transaction hash.
+func (eb *ElectrumBackend) TxRequest(txHash string) {
+	reporter.GetInstance().IncTxScheduled()
+	reporter.GetInstance().Logf("scheduling tx: %s", txHash)
+	eb.txRequests <- txHash
 }
 
 // TxResponses exposes a channel that allows to consume backend's responses to
@@ -314,29 +322,38 @@ func (eb *ElectrumBackend) processTxRequest(node *electrum.Node, txHash string) 
 		eb.removeNode(node.Ident)
 
 		// requeue request
-		// TODO: we should have a retry counter and fail gracefully if an address fails too
-		// many times.
+		// TODO: we should have a retry counter and fail gracefully if a transaction fails
+		//       too many times.
 		eb.txRequests <- txHash
 		return err
 	}
+	height, err := eb.getTxHeight(txHash)
+	if err != nil {
+		// a transaction thas is being asked for is not in the cache, yet (most likely)
+		// TODO: we should have a retry counter and fail gracefully if a transaction fails
+		//       too many times.
+		eb.txRequests <- txHash
+		return nil
+	}
+
 	eb.txResponses <- &TxResponse{
 		Hash:   txHash,
-		Height: eb.getTxHeight(txHash),
+		Height: height,
 		Hex:    hex,
 	}
 
 	return nil
 }
 
-func (eb *ElectrumBackend) getTxHeight(txHash string) int64 {
+func (eb *ElectrumBackend) getTxHeight(txHash string) (int64, error) {
 	eb.transactionsMu.Lock()
 	defer eb.transactionsMu.Unlock()
 
 	height, exists := eb.transactions[txHash]
 	if !exists {
-		panic(fmt.Sprintf("inconsistent cache: %s", txHash))
+		return -1, fmt.Errorf("no block height information for transaction %s yet", txHash)
 	}
-	return height
+	return height, nil
 }
 
 func (eb *ElectrumBackend) processAddrRequest(node *electrum.Node, addr *deriver.Address) error {
@@ -357,7 +374,7 @@ func (eb *ElectrumBackend) processAddrRequest(node *electrum.Node, addr *deriver
 		txHashes = append(txHashes, tx.Hash)
 		// fetch additional data if needed
 	}
-	go eb.scheduleTx(txs)
+	eb.cacheTxs(txs)
 
 	// TODO: we assume there are no more transactions. We should check what the API returns for
 	// addresses with very large number of transactions.
@@ -368,7 +385,7 @@ func (eb *ElectrumBackend) processAddrRequest(node *electrum.Node, addr *deriver
 	return nil
 }
 
-func (eb *ElectrumBackend) scheduleTx(txs []*electrum.Transaction) {
+func (eb *ElectrumBackend) cacheTxs(txs []*electrum.Transaction) {
 	for _, tx := range txs {
 		eb.transactionsMu.Lock()
 		height, exists := eb.transactions[tx.Hash]
@@ -381,11 +398,6 @@ func (eb *ElectrumBackend) scheduleTx(txs []*electrum.Transaction) {
 		}
 		eb.transactions[tx.Hash] = int64(tx.Height)
 		eb.transactionsMu.Unlock()
-
-		reporter.GetInstance().IncTxScheduled()
-		reporter.GetInstance().Log(fmt.Sprintf("scheduling tx: %s", tx.Hash))
-
-		eb.txRequests <- tx.Hash
 	}
 }
 

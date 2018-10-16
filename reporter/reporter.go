@@ -33,6 +33,10 @@ func (r *Reporter) Log(msg string) {
 		r.GetTxScheduled(), r.GetTxFetched(), r.GetTxAfterFilter(), r.GetPeers(), msg)
 }
 
+func (r *Reporter) Logf(format string, args ...interface{}) {
+	r.Log(fmt.Sprintf(format, args...))
+}
+
 func (r *Reporter) IncAddressesFetched() {
 	atomic.AddUint32(&r.addressesFetched, 1)
 }

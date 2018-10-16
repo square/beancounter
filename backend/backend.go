@@ -29,6 +29,7 @@ import (
 type Backend interface {
 	AddrRequest(addr *deriver.Address)
 	AddrResponses() <-chan *AddrResponse
+	TxRequest(txHash string)
 	TxResponses() <-chan *TxResponse
 
 	ChainHeight() uint32

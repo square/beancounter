@@ -106,22 +106,6 @@
   version = "v1.1.1"
 
 [[projects]]
-  digest = "1:cdb899c199f907ac9fb50495ec71212c95cb5b0e0a8ee0800da0238036091033"
-  name = "github.com/mattn/go-runewidth"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "ce7b0b5c7b45a81508558cd1dba6bb1e4ddb51bb"
-  version = "v0.0.3"
-
-[[projects]]
-  branch = "master"
-  digest = "1:f611266e3ac01ab4adb6f1d67f6c1be82998d02f452faff450596658712d860b"
-  name = "github.com/olekukonko/tablewriter"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "be2c049b30ccd4d3fd795d6bf7dce74e42eeedaa"
-
-[[projects]]
   digest = "1:40e195917a951a8bf867cd05de2a46aaf1806c50cf92eebf4c16f78cd196f747"
   name = "github.com/pkg/errors"
   packages = ["."]
@@ -166,13 +150,13 @@
   analyzer-version = 1
   input-imports = [
     "github.com/bcext/cashutil",
+    "github.com/btcsuite/btcd/btcjson",
     "github.com/btcsuite/btcd/chaincfg",
     "github.com/btcsuite/btcd/chaincfg/chainhash",
     "github.com/btcsuite/btcd/rpcclient",
     "github.com/btcsuite/btcd/txscript",
     "github.com/btcsuite/btcutil",
     "github.com/btcsuite/btcutil/hdkeychain",
-    "github.com/olekukonko/tablewriter",
     "github.com/pkg/errors",
     "github.com/stretchr/testify/assert",
     "gopkg.in/alecthomas/kingpin.v2",

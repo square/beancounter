@@ -25,9 +25,6 @@ type RecorderBackend struct {
 	addrResponses chan *AddrResponse
 	txResponses   chan *TxResponse
 
-	transactionsMu sync.Mutex // mutex to guard read/writes to transactions map
-	transactions   map[string]int64
-
 	// internal channels
 	doneCh chan bool
 
@@ -45,7 +42,6 @@ func NewRecorderBackend(b Backend, filepath string) (*RecorderBackend, error) {
 		txResponses:    make(chan *TxResponse, 2*maxTxsPerAddr),
 		addrIndex:      make(map[string]AddrResponse),
 		txIndex:        make(map[string]TxResponse),
-		transactions:   make(map[string]int64),
 		doneCh:         make(chan bool),
 		outputFilepath: filepath,
 	}
@@ -64,6 +60,12 @@ func (rb *RecorderBackend) AddrRequest(addr *deriver.Address) {
 // address requests created with AddrRequest()
 func (rb *RecorderBackend) AddrResponses() <-chan *AddrResponse {
 	return rb.addrResponses
+}
+
+// TxRequest schedules a request to the backend to lookup information related
+// to the given transaction hash.
+func (rb *RecorderBackend) TxRequest(txHash string) {
+	rb.backend.TxRequest(txHash)
 }
 
 // TxResponses exposes a channel that allows to consume backend's responses to
@@ -121,7 +123,7 @@ func (rb *RecorderBackend) processRequests() {
 func (rb *RecorderBackend) writeToFile() error {
 	cachedData := index{Metadata: metadata{}, Addresses: []address{}, Transactions: []transaction{}}
 
-	reporter.GetInstance().Log(fmt.Sprintf("writing data to %s\n ...", rb.outputFilepath))
+	reporter.GetInstance().Logf("writing data to %s\n ...", rb.outputFilepath)
 	f, err := os.Create(rb.outputFilepath)
 	if err != nil {
 		return err
