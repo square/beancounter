@@ -19,7 +19,6 @@ import (
 type BtcdBackend struct {
 	client            *rpcclient.Client
 	network           utils.Network
-	maxBlockHeight    int64
 	blockHeightMu     sync.Mutex // mutex to guard read/writes to blockHeightLookup map
 	blockHeightLookup map[string]int64
 
@@ -31,12 +30,11 @@ type BtcdBackend struct {
 	// internal channels
 	transactionsMu sync.Mutex // mutex to guard read/writes to transactions map
 	transactions   map[string]int64
+
+	chainHeight uint32
 }
 
 const (
-	// min number of confirmations required
-	// any blocks with lower confirmation numbers will be ignored
-	minConfirmations = 6
 	// For now assume that there cannot be more than maxTxsPerAddr.
 	// Ideally, if maxTxsPerAddr is reached then we should paginate and retrieve
 	// all the transactions.
@@ -48,12 +46,11 @@ const (
 )
 
 // NewBtcdBackend returns a new BtcdBackend structs or errors.
-// BtcdBackend takes into account maxBlockHeight and ignores any transactions that belong to higher blocks.
-// If 0 is passed, then the block chain is queried for max block height and minConfirmations is subtracted
-// (to avoid querying blocks that might potentially be orphaned).
 //
-// NOTE: BtcdBackend is assumed to be connecting to a personal node, hence it disables TLS for now
-func NewBtcdBackend(maxBlockHeight int64, hostPort, user, pass string, network utils.Network) (*BtcdBackend, error) {
+// BtcdBackend is meants to connect to a personal Btcd node (because public nodes don't expose the
+// API we need). There's no TLS support. If your node is not co-located with Beancounter, we
+// recommend wrapping your connection in a ssh or other secure tunnel.
+func NewBtcdBackend(hostPort, user, pass string, network utils.Network) (*BtcdBackend, error) {
 	connCfg := &rpcclient.ConnConfig{
 		Host:         hostPort,
 		User:         user,
@@ -76,27 +73,20 @@ func NewBtcdBackend(maxBlockHeight int64, hostPort, user, pass string, network u
 	}
 	fmt.Printf("%+v\n", genesis)
 
-	actualMaxHeight, err := client.GetBlockCount()
-	maxAllowedHeight := actualMaxHeight - minConfirmations
+	height, err := client.GetBlockCount()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not connect to the Btcd server")
-	}
-	if maxBlockHeight == 0 {
-		maxBlockHeight = maxAllowedHeight
-	}
-	if maxAllowedHeight < maxBlockHeight {
-		return nil, fmt.Errorf("wanted max block height: %d, block chain has %d (with # confirmations of %d)", maxBlockHeight, maxAllowedHeight, minConfirmations)
 	}
 
 	b := &BtcdBackend{
 		client:            client,
 		network:           network,
-		maxBlockHeight:    maxBlockHeight,
 		addrRequests:      make(chan *deriver.Address, addrRequestsChanSize),
 		addrResponses:     make(chan *AddrResponse, addrRequestsChanSize),
 		txResponses:       make(chan *TxResponse, 2*maxTxsPerAddr),
 		blockHeightLookup: make(map[string]int64),
 		transactions:      make(map[string]int64),
+		chainHeight:       uint32(height),
 	}
 
 	// launch
@@ -132,6 +122,10 @@ func (b *BtcdBackend) TxResponses() <-chan *TxResponse {
 func (b *BtcdBackend) Finish() {
 	close(b.addrResponses)
 	b.client.Disconnect()
+}
+
+func (b *BtcdBackend) ChainHeight() uint32 {
+	return b.chainHeight
 }
 
 func (b *BtcdBackend) processRequests() {

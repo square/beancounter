@@ -113,6 +113,11 @@ type Peer struct {
 	Features []string
 }
 
+type Header struct {
+	Height uint32 `json:"height"`
+	Hex    string `json:"hex"`
+}
+
 func NewNode(addr, port string, network utils.Network) (*Node, error) {
 	n := &Node{}
 	var a string
@@ -212,6 +217,19 @@ func (n *Node) BlockchainTransactionGet(txid string) (string, error) {
 	var hex string
 	err := n.request("blockchain.transaction.get", []interface{}{txid, false}, &hex)
 	return hex, err
+}
+
+// Subscribe to receive block headers when a new block is found.
+//
+// Note: there's no way to unsubscribe, and the rest of this code doesn't know how to deal with
+// notifications. It is advisable to only call this method once and disconnect/reconnect after
+// getting the block height.
+//
+// https://electrumx.readthedocs.io/en/latest/protocol-methods.html#blockchain-headers-subscribe
+func (n *Node) BlockchainHeadersSubscribe() (*Header, error) {
+	var header Header
+	err := n.request("blockchain.headers.subscribe", []interface{}{true}, &header)
+	return &header, err
 }
 
 // ServerPeersSubscribe requests peers from a server.

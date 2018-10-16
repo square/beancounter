@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"math"
 	"os"
 	"strconv"
@@ -34,9 +35,14 @@ var (
 	rpcPass       = kingpin.Flag("rpcpass", "RPC password").PlaceHolder("PASSWORD").String()
 	debug         = kingpin.Flag("debug", "debug output").Default("false").Bool()
 	findAddr      = kingpin.Flag("find-addr", "finds the offset of an address").String()
-	blockHeight   = kingpin.Flag("block-height", "compute balance at given block height").Default("0").Int64()
+	blockHeight   = kingpin.Flag("block-height", "compute balance at given block height. Defaults to current chain height - 6.").Default("0").Uint32()
 	singleAddress = kingpin.Flag("single-address", "for debugging purpose").String()
 	fixtureFile   = kingpin.Flag("fixture-file", "fixture file to use for recording data or reading from").PlaceHolder("FILEPATH").String()
+)
+
+const (
+	// number of confirmations required so we don't have to worry about orphaned blocks.
+	minConfirmations = 6
 )
 
 func main() {
@@ -111,10 +117,15 @@ func main() {
 	backend, err := buildBackend(network)
 	PanicOnError(err)
 
-	// TODO: if blockHeight is 0, we should default to current height - 6.
+	// If blockHeight is 0, we default to current height - 6.
 	if *blockHeight == 0 {
-		panic("blockHeight not set")
+		*blockHeight = backend.ChainHeight() - minConfirmations
 	}
+	if *blockHeight > backend.ChainHeight()-minConfirmations {
+		log.Panicf("blockHeight %d is too high (> %d - %d)", *blockHeight, backend.ChainHeight(), minConfirmations)
+	}
+	fmt.Printf("Going to compute balance at %d\n", *blockHeight)
+
 	tb := accounter.New(backend, deriver, *lookahead, *blockHeight)
 
 	balance := tb.ComputeBalance()
@@ -135,7 +146,7 @@ func buildBackend(network Network) (backend.Backend, error) {
 			return nil, err
 		}
 	case "btcd":
-		b, err = backend.NewBtcdBackend(*blockHeight, (*addr).String(), *rpcUser, *rpcPass, network)
+		b, err = backend.NewBtcdBackend((*addr).String(), *rpcUser, *rpcPass, network)
 		if err != nil {
 			return nil, err
 		}
@@ -153,7 +164,7 @@ func buildBackend(network Network) (backend.Backend, error) {
 		if *fixtureFile == "" {
 			panic("btcd-recorder backend requires a --fixture-file to be specified, so data can be recorded.")
 		}
-		b, err = backend.NewBtcdBackend(*blockHeight, (*addr).String(), *rpcUser, *rpcPass, network)
+		b, err = backend.NewBtcdBackend((*addr).String(), *rpcUser, *rpcPass, network)
 		if err != nil {
 			return nil, err
 		}

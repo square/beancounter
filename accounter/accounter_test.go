@@ -11,7 +11,7 @@ import (
 
 func TestProcessTransactions(t *testing.T) {
 	a := Accounter{
-		maxHeight:    100,
+		blockHeight:  100,
 		transactions: make(map[string]transaction),
 	}
 	// https://api.blockcypher.com/v1/btc/main/txs/38f6366700f12dc902718ab5222c8ae67a4514ed07ee8aea364feec22bf6424f?limit=50&includeHex=true

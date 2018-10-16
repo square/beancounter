@@ -8,8 +8,13 @@ import (
 // backends marshal/unmarshal address and transaction data
 
 type index struct {
+	Metadata     metadata      `json:"metadata"`
 	Addresses    []address     `json:"addresses"`
 	Transactions []transaction `json:"transactions"`
+}
+
+type metadata struct {
+	Height uint32 `json:"height"`
 }
 
 type address struct {

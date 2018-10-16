@@ -84,6 +84,10 @@ func (rb *RecorderBackend) Finish() {
 	}
 }
 
+func (rb *RecorderBackend) ChainHeight() uint32 {
+	return rb.backend.ChainHeight()
+}
+
 func (rb *RecorderBackend) processRequests() {
 	backendAddrResponses := rb.backend.AddrResponses()
 	backendTxResponses := rb.backend.TxResponses()
@@ -115,7 +119,7 @@ func (rb *RecorderBackend) processRequests() {
 }
 
 func (rb *RecorderBackend) writeToFile() error {
-	cachedData := index{Addresses: []address{}, Transactions: []transaction{}}
+	cachedData := index{Metadata: metadata{}, Addresses: []address{}, Transactions: []transaction{}}
 
 	reporter.GetInstance().Log(fmt.Sprintf("writing data to %s\n ...", rb.outputFilepath))
 	f, err := os.Create(rb.outputFilepath)
@@ -123,6 +127,8 @@ func (rb *RecorderBackend) writeToFile() error {
 		return err
 	}
 	defer f.Close()
+
+	cachedData.Metadata.Height = rb.ChainHeight()
 
 	for addr, addrResp := range rb.addrIndex {
 		a := address{
