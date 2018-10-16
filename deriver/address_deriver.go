@@ -23,7 +23,6 @@ type AddressDeriver struct {
 	network       Network
 	xpubs         []string
 	m             int
-	account       uint32
 	singleAddress string
 }
 
@@ -88,12 +87,11 @@ func (a *Address) Script() string {
 }
 
 // NewAddressDeriver returns a new instance of AddressDeriver
-func NewAddressDeriver(network Network, xpubs []string, m int, account uint32, singleAddress string) *AddressDeriver {
+func NewAddressDeriver(network Network, xpubs []string, m int, singleAddress string) *AddressDeriver {
 	return &AddressDeriver{
 		network:       network,
 		xpubs:         xpubs,
 		m:             m,
-		account:       account,
 		singleAddress: singleAddress,
 	}
 }
@@ -111,7 +109,7 @@ func (d *AddressDeriver) Derive(change uint32, addressIndex uint32) *Address {
 		}
 	}
 
-	path := fmt.Sprintf("m/%s/%d/%d/%d", coinType(d.network), d.account, change, addressIndex)
+	path := fmt.Sprintf("m/.../%d/%d", change, addressIndex)
 	addr := &Address{path: path, net: d.network, change: change, addrIndex: addressIndex}
 	if len(d.xpubs) == 1 {
 		addr.addr = d.singleDerive(change, addressIndex)
@@ -125,11 +123,6 @@ func (d *AddressDeriver) Derive(change uint32, addressIndex uint32) *Address {
 func (d *AddressDeriver) singleDerive(change uint32, addressIndex uint32) string {
 	key, err := hdkeychain.NewKeyFromString(d.xpubs[0])
 	PanicOnError(err)
-
-	if d.account != 4294967295 {
-		key, err = key.Child(d.account)
-		PanicOnError(err)
-	}
 
 	key, err = key.Child(change)
 	PanicOnError(err)
@@ -150,9 +143,6 @@ func (d *AddressDeriver) multiSigSegwitDerive(change uint32, addressIndex uint32
 
 	for _, xpub := range d.xpubs {
 		key, err := hdkeychain.NewKeyFromString(xpub)
-		PanicOnError(err)
-
-		key, err = key.Child(d.account)
 		PanicOnError(err)
 
 		key, err = key.Child(change)
@@ -225,16 +215,4 @@ func sortByteArrays(src [][]byte) [][]byte {
 	sorted := sortedByteArrays(src)
 	sort.Sort(sorted)
 	return sorted
-}
-
-// as per SLIP-0044 https://github.com/satoshilabs/slips/blob/master/slip-0044.md
-func coinType(n Network) string {
-	switch n {
-	case Mainnet:
-		return "0'"
-	case Testnet:
-		return "1'"
-	default:
-		panic("unreachable")
-	}
 }

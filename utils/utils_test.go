@@ -54,3 +54,15 @@ func TestGenesisBlock(t *testing.T) {
 	assert.Equal(t, "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f", GenesisBlock(Mainnet))
 	assert.Equal(t, "000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943", GenesisBlock(Testnet))
 }
+
+func TestVerifyMandN(t *testing.T) {
+	assert.Error(t, VerifyMandN(0, 10))
+	assert.Error(t, VerifyMandN(12, 10))
+	assert.Error(t, VerifyMandN(5, 30))
+
+	assert.Nil(t, VerifyMandN(1, 1))
+	assert.Nil(t, VerifyMandN(1, 2))
+	assert.Nil(t, VerifyMandN(2, 4))
+	assert.Nil(t, VerifyMandN(5, 20))
+	assert.Nil(t, VerifyMandN(20, 20))
+}
