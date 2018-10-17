@@ -79,6 +79,21 @@ func GenesisBlock(network Network) string {
 	}
 }
 
+func VerifyMandN(m int, n int) error {
+	if m <= 0 {
+		return fmt.Errorf("m has to be positive (got %d)", m)
+	}
+
+	if m > n {
+		return fmt.Errorf("m cannot be larger than n (%d > %d)", m, n)
+	}
+
+	if n > 20 {
+		return fmt.Errorf("n cannot be greater than 20 (got %d)", n)
+	}
+	return nil
+}
+
 const (
 	Mainnet Network = "mainnet"
 	Testnet Network = "testnet"
