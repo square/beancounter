@@ -2,6 +2,7 @@ package backend
 
 import (
 	"github.com/square/beancounter/deriver"
+	time "time"
 )
 
 // Backend is an interface which abstracts different types of backends.
@@ -27,12 +28,14 @@ import (
 // forgo the Finish() method and have the Accounter read from the TxResponses channel until it has
 // all the data it needs. This would require the Accounter to maintain its own set of transactions.
 type Backend interface {
+	ChainHeight() uint32
+
 	AddrRequest(addr *deriver.Address)
 	AddrResponses() <-chan *AddrResponse
 	TxRequest(txHash string)
 	TxResponses() <-chan *TxResponse
-
-	ChainHeight() uint32
+	BlockRequest(height uint32)
+	BlockResponses() <-chan *BlockResponse
 
 	Finish()
 }
@@ -49,6 +52,11 @@ type TxResponse struct {
 	Hash   string
 	Height int64
 	Hex    string
+}
+
+type BlockResponse struct {
+	Height    uint32
+	Timestamp time.Time
 }
 
 // HasTransactions returns true if the Response contains any transactions

@@ -17,6 +17,8 @@ import (
 // balance and transaction history information for a given address.
 // BtcdBackend implements Backend interface.
 type BtcdBackend struct {
+	chainHeight uint32
+
 	client            *rpcclient.Client
 	network           utils.Network
 	blockHeightMu     sync.Mutex // mutex to guard read/writes to blockHeightLookup map
@@ -28,7 +30,10 @@ type BtcdBackend struct {
 	txRequests    chan string
 	txResponses   chan *TxResponse
 
-	chainHeight uint32
+	// channels used to communicate with the Blockfinder
+	blockRequests  chan uint32
+	blockResponses chan *BlockResponse
+
 	// internal channels
 	transactionsMu     sync.Mutex // mutex to guard read/writes to transactions map
 	cachedTransactions map[string]*TxResponse
@@ -42,6 +47,7 @@ const (
 	maxTxsPerAddr = 1000
 
 	addrRequestsChanSize = 100
+	blockRequestChanSize = 100
 
 	concurrency = 100
 )
@@ -72,7 +78,6 @@ func NewBtcdBackend(hostPort, user, pass string, network utils.Network) (*BtcdBa
 	if genesis.String() != utils.GenesisBlock(network) {
 		return nil, errors.New(fmt.Sprintf("Unexpected genesis block %s != %s", genesis.String(), utils.GenesisBlock(network)))
 	}
-	fmt.Printf("%+v\n", genesis)
 
 	height, err := client.GetBlockCount()
 	if err != nil {
@@ -80,13 +85,16 @@ func NewBtcdBackend(hostPort, user, pass string, network utils.Network) (*BtcdBa
 	}
 
 	b := &BtcdBackend{
-		client:             client,
-		network:            network,
-		chainHeight:        uint32(height),
-		addrRequests:       make(chan *deriver.Address, addrRequestsChanSize),
-		addrResponses:      make(chan *AddrResponse, addrRequestsChanSize),
-		txRequests:         make(chan string, 2*maxTxsPerAddr),
-		txResponses:        make(chan *TxResponse, 2*maxTxsPerAddr),
+		client:         client,
+		network:        network,
+		chainHeight:    uint32(height),
+		addrRequests:   make(chan *deriver.Address, addrRequestsChanSize),
+		addrResponses:  make(chan *AddrResponse, addrRequestsChanSize),
+		txRequests:     make(chan string, 2*maxTxsPerAddr),
+		txResponses:    make(chan *TxResponse, 2*maxTxsPerAddr),
+		blockRequests:  make(chan uint32, 2*blockRequestChanSize),
+		blockResponses: make(chan *BlockResponse, 2*blockRequestChanSize),
+
 		blockHeightLookup:  make(map[string]int64),
 		cachedTransactions: make(map[string]*TxResponse),
 		doneCh:             make(chan bool),
@@ -129,6 +137,14 @@ func (b *BtcdBackend) TxResponses() <-chan *TxResponse {
 	return b.txResponses
 }
 
+func (b *BtcdBackend) BlockRequest(height uint32) {
+	b.blockRequests <- height
+}
+
+func (b *BtcdBackend) BlockResponses() <-chan *BlockResponse {
+	return b.blockResponses
+}
+
 // Finish informs the backend to stop doing its work.
 func (b *BtcdBackend) Finish() {
 	close(b.doneCh)
@@ -151,6 +167,11 @@ func (b *BtcdBackend) processRequests() {
 			err := b.processTxRequest(tx)
 			if err != nil {
 				panic(fmt.Sprintf("processTxRequest failed: %+v", err))
+			}
+		case block := <-b.blockRequests:
+			err := b.processBlockRequest(block)
+			if err != nil {
+				panic(fmt.Sprintf("processBlockRequest failed: %+v", err))
 			}
 		case <-b.doneCh:
 			break
@@ -230,6 +251,36 @@ func (b *BtcdBackend) processTxRequest(txHash string) error {
 		Hash:   txHash,
 		Height: height,
 		Hex:    txResp.Hex,
+	}
+	return nil
+}
+
+func (b *BtcdBackend) processBlockRequest(height uint32) error {
+	hash, err := b.client.GetBlockHash(int64(height))
+	if err != nil {
+		if jerr, ok := err.(*btcjson.RPCError); ok {
+			switch jerr.Code {
+			case btcjson.ErrRPCInvalidAddressOrKey:
+				return errors.Wrap(err, fmt.Sprintf("blockchain doesn't have block %d", height))
+			}
+		}
+		return errors.Wrap(err, fmt.Sprintf("could not fetch block %d", height))
+	}
+
+	header, err := b.client.GetBlockHeader(hash)
+	if err != nil {
+		if jerr, ok := err.(*btcjson.RPCError); ok {
+			switch jerr.Code {
+			case btcjson.ErrRPCInvalidAddressOrKey:
+				return errors.Wrap(err, fmt.Sprintf("blockchain doesn't have block %d", height))
+			}
+		}
+		return errors.Wrap(err, fmt.Sprintf("could not fetch block %d", height))
+	}
+
+	b.blockResponses <- &BlockResponse{
+		Height:    height,
+		Timestamp: header.Timestamp,
 	}
 	return nil
 }

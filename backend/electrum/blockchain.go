@@ -118,6 +118,12 @@ type Header struct {
 	Hex    string `json:"hex"`
 }
 
+type Block struct {
+	Count uint   `json:"count"`
+	Hex   string `json:"hex"`
+	Max   uint   `json:"max"`
+}
+
 func NewNode(addr, port string, network utils.Network) (*Node, error) {
 	n := &Node{}
 	var a string
@@ -259,6 +265,13 @@ func (n *Node) ServerPeersSubscribe() ([]Peer, error) {
 	}
 
 	return out, nil
+}
+
+// BlockchainBlockHeaders returns a block header (160 hex).
+func (n *Node) BlockchainBlockHeaders(height uint32, count uint) (Block, error) {
+	var block Block
+	err := n.request("blockchain.block.headers", []interface{}{height, count}, &block)
+	return block, err
 }
 
 func (n *Node) request(method string, params []interface{}, result interface{}) error {
