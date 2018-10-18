@@ -1,11 +1,17 @@
 package utils
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestPanicOnError(t *testing.T) {
+	assert.Panics(t, func() { PanicOnError(fmt.Errorf("some error")) })
+	assert.NotPanics(t, func() { PanicOnError(nil) })
+}
 
 func TestMax(t *testing.T) {
 	v1 := uint32(0)
@@ -34,6 +40,8 @@ func TestXpubToNetwork(t *testing.T) {
 	assert.Equal(t, XpubToNetwork("xpub6C774QqLVXvX3WBMACHRVdWTyPphFh45cXFvawg9eFuNAK2DNPsWDf1zJcSyZWY59FNspYUCAUJJXhmVzCPcWzLWDm6yEQSN9982pBAsj1k"), Mainnet)
 
 	assert.Equal(t, XpubToNetwork("tpubDC5s7LsM3QFZz8CKNz8ePa2wpvQiq5LsGXrkoaaGsLhNx44wTr13XqoKEMCFPWMK4yen2DsLN7ArrZuqRqQE24Y9kNN51bpcjNdbWpJngdG"), Testnet)
+
+	assert.Panics(t, func() { XpubToNetwork("foobar") })
 }
 
 func TestAddressToNetwork(t *testing.T) {
@@ -43,6 +51,8 @@ func TestAddressToNetwork(t *testing.T) {
 	assert.Equal(t, AddressToNetwork("mm8xEm6YS8B7ErLYYqcdF6URWkS1BWnqtY"), Testnet)
 	assert.Equal(t, AddressToNetwork("2MvmkK3F4vT2h3gLjxz66SwQ5zW5XbsdZLu"), Testnet)
 	assert.Equal(t, AddressToNetwork("n3s7pVRvCEuXfF5fyh74JXmYg45q4Wev86"), Testnet)
+
+	assert.Panics(t, func() { AddressToNetwork("foobar") })
 }
 
 func TestChainConfig(t *testing.T) {
