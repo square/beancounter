@@ -55,7 +55,7 @@ Balance: 267893477
 ```
 
 Compute balance (using Btcd)
---------------------------------
+----------------------------
 
 [https://github.com/btcsuite/btcd](Btcd) contains information on how to setup a node.
 
@@ -83,7 +83,8 @@ Balance: 267893477
 ```
 
 Details
-#######
+=======
+
 Beancounter is implemented in Go. We picked Go because we wanted an easy build and distribution process. We appreciate the ability to cross-compile and distribute static binaries which don't have external dependencies.
 
 We use the following process to determine a deterministic wallet's balance at a given block height:
@@ -97,7 +98,7 @@ We use the following process to determine a deterministic wallet's balance at a 
 6. Iterate over the transactions and compute the final balance.
 
 Contributing
-############
+============
 
 We appreciate any pull request which fixes bugs or adds features!
 
