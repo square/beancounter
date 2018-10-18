@@ -2,8 +2,8 @@ package backend
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"sync"
 
@@ -185,7 +185,7 @@ func (b *FixtureBackend) processBlockRequest(height uint32) {
 		b.blockResponses <- &resp
 		return
 	}
-	panic(fmt.Sprintf("fixture doesn't contain block %d", height))
+	log.Panicf("fixture doesn't contain block %d", height)
 }
 
 func (fb *FixtureBackend) loadFromFile(f *os.File) error {

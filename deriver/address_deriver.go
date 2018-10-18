@@ -156,7 +156,7 @@ func (d *AddressDeriver) multiSigSegwitDerive(change uint32, addressIndex uint32
 
 		pubKeyBytes := pubKey.SerializeCompressed()
 		if len(pubKeyBytes) != 33 {
-			panic(fmt.Sprintf("expected pubkey length 33, got %d", len(pubKeyBytes)))
+			log.Panicf("expected pubkey length 33, got %d", len(pubKeyBytes))
 		}
 
 		pubKeysBytes = append(pubKeysBytes, pubKeyBytes)

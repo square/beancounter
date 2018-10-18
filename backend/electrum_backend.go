@@ -443,7 +443,7 @@ func (eb *ElectrumBackend) cacheTxs(txs []*electrum.Transaction) {
 	for _, tx := range txs {
 		height, exists := eb.transactions[tx.Hash]
 		if exists && (height != int64(tx.Height)) {
-			panic(fmt.Sprintf("inconsistent cache: %s %d != %d", tx.Hash, height, tx.Height))
+			log.Panicf("inconsistent cache: %s %d != %d", tx.Hash, height, tx.Height)
 		}
 		eb.transactions[tx.Hash] = int64(tx.Height)
 	}

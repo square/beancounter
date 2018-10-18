@@ -3,6 +3,7 @@ package electrum
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -157,7 +158,7 @@ func NewNode(addr, port string, network utils.Network) (*Node, error) {
 		}
 		t, err = NewSSLTransport(fmt.Sprintf("%s:%s", a, p))
 	} else {
-		panic(fmt.Sprintf("port (%s) must start with t or s", port))
+		log.Panicf("port (%s) must start with t or s", port)
 	}
 
 	if err != nil {

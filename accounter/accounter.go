@@ -3,6 +3,7 @@ package accounter
 import (
 	"encoding/hex"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -199,7 +200,7 @@ func (a *Accounter) balance() uint64 {
 				balance -= prev.vout[txin.index].value
 				if prev.vout[txin.index].spentBy != nil {
 					// sanity check: an output can only be spent by one transaction.
-					panic(fmt.Sprintf("%s and %s, both spending %s", hash, *prev.vout[txin.index].spentBy, txin.prevHash))
+					log.Panicf("%s and %s, both spending %s", hash, *prev.vout[txin.index].spentBy, txin.prevHash)
 				}
 				prev.vout[txin.index].spentBy = &hash
 			}

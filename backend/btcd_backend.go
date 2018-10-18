@@ -2,6 +2,7 @@ package backend
 
 import (
 	"fmt"
+	"log"
 	"sync"
 
 	"github.com/btcsuite/btcd/btcjson"
@@ -76,7 +77,7 @@ func NewBtcdBackend(host, port, user, pass string, network utils.Network) (*Btcd
 		return nil, errors.Wrap(err, "GetBlockHash(0) failed")
 	}
 	if genesis.String() != utils.GenesisBlock(network) {
-		return nil, errors.New(fmt.Sprintf("Unexpected genesis block %s != %s", genesis.String(), utils.GenesisBlock(network)))
+		return nil, errors.Errorf("Unexpected genesis block %s != %s", genesis.String(), utils.GenesisBlock(network))
 	}
 
 	height, err := client.GetBlockCount()
@@ -161,17 +162,17 @@ func (b *BtcdBackend) processRequests() {
 		case addr := <-b.addrRequests:
 			err := b.processAddrRequest(addr)
 			if err != nil {
-				panic(fmt.Sprintf("processAddrRequest failed: %+v", err))
+				log.Panicf("processAddrRequest failed: %+v", err)
 			}
 		case tx := <-b.txRequests:
 			err := b.processTxRequest(tx)
 			if err != nil {
-				panic(fmt.Sprintf("processTxRequest failed: %+v", err))
+				log.Panicf("processTxRequest failed: %+v", err)
 			}
 		case block := <-b.blockRequests:
 			err := b.processBlockRequest(block)
 			if err != nil {
-				panic(fmt.Sprintf("processBlockRequest failed: %+v", err))
+				log.Panicf("processBlockRequest failed: %+v", err)
 			}
 		case <-b.doneCh:
 			break
@@ -261,10 +262,10 @@ func (b *BtcdBackend) processBlockRequest(height uint32) error {
 		if jerr, ok := err.(*btcjson.RPCError); ok {
 			switch jerr.Code {
 			case btcjson.ErrRPCInvalidAddressOrKey:
-				return errors.Wrap(err, fmt.Sprintf("blockchain doesn't have block %d", height))
+				return errors.Wrapf(err, "blockchain doesn't have block %d", height)
 			}
 		}
-		return errors.Wrap(err, fmt.Sprintf("could not fetch block %d", height))
+		return errors.Wrapf(err, "could not fetch block %d", height)
 	}
 
 	header, err := b.client.GetBlockHeader(hash)
@@ -272,10 +273,10 @@ func (b *BtcdBackend) processBlockRequest(height uint32) error {
 		if jerr, ok := err.(*btcjson.RPCError); ok {
 			switch jerr.Code {
 			case btcjson.ErrRPCInvalidAddressOrKey:
-				return errors.Wrap(err, fmt.Sprintf("blockchain doesn't have block %d", height))
+				return errors.Wrapf(err, "blockchain doesn't have block %d", height)
 			}
 		}
-		return errors.Wrap(err, fmt.Sprintf("could not fetch block %d", height))
+		return errors.Wrapf(err, "could not fetch block %d", height)
 	}
 
 	b.blockResponses <- &BlockResponse{
@@ -297,7 +298,7 @@ func (b *BtcdBackend) cacheTxs(txs []*btcjson.SearchRawTransactionsResult) {
 
 		height, err := b.getBlockHeight(tx.BlockHash)
 		if err != nil {
-			panic(fmt.Sprintf("error getting block height for hash %s: %s", tx.BlockHash, err.Error()))
+			log.Panicf("error getting block height for hash %s: %s", tx.BlockHash, err.Error())
 		}
 
 		b.transactionsMu.Lock()
