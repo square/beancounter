@@ -7,6 +7,17 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestAddress(t *testing.T) {
+	deriver := NewAddressDeriver(Mainnet, []string{"xpub6CjzRxucHWJbmtuNTg6EjPax3V75AhsBRnFKn8MEkc8UFFEhrCoWcQN6oUBhfZWoFKqTyQ21iNVK8KMbC44ifW25uyXaMPWkRtpwcbAWXJx"}, 1, "")
+	addr := deriver.Derive(0, 5)
+	assert.Equal(t, addr.Path(), "m/.../0/5")
+	assert.Equal(t, addr.String(), "1N4VBTZqwLkHEKX79kjJ1WaYvX4c3txioz")
+	assert.Equal(t, addr.Change(), uint32(0))
+	assert.Equal(t, addr.Index(), uint32(5))
+	assert.Equal(t, addr.Network(), Mainnet)
+	assert.Equal(t, addr.Script(), "76a914e70369bfda4ba9bdcbb96cfd269a768573d0624c88ac")
+}
+
 func TestDeriveMultiSigSegwit(t *testing.T) {
 	xpubs := []string{
 		"tpubDAiPiLZeUdwo9oJiE9GZnteXj2E2MEMUb4knc4yCD87bL9siDgYcvrZSHZQZcYTyraL3fxVBRCcMiyfr3oQfH1wNo8J5i8aRAN56dDXaZxC",
