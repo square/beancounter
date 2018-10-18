@@ -349,14 +349,7 @@ func (eb *ElectrumBackend) processTxRequest(node *electrum.Node, txHash string) 
 		eb.txRequests <- txHash
 		return err
 	}
-	height, err := eb.getTxHeight(txHash)
-	if err != nil {
-		// a transaction thas is being asked for is not in the cache, yet (most likely)
-		// TODO: we should have a retry counter and fail gracefully if a transaction fails
-		//       too many times.
-		eb.txRequests <- txHash
-		return nil
-	}
+	height := eb.getTxHeight(txHash)
 
 	eb.txResponses <- &TxResponse{
 		Hash:   txHash,
@@ -367,15 +360,15 @@ func (eb *ElectrumBackend) processTxRequest(node *electrum.Node, txHash string) 
 	return nil
 }
 
-func (eb *ElectrumBackend) getTxHeight(txHash string) (int64, error) {
+func (eb *ElectrumBackend) getTxHeight(txHash string) int64 {
 	eb.transactionsMu.Lock()
 	defer eb.transactionsMu.Unlock()
 
 	height, exists := eb.transactions[txHash]
 	if !exists {
-		return -1, fmt.Errorf("no block height information for transaction %s yet", txHash)
+		log.Panicf("transactions cache miss for %s", txHash)
 	}
-	return height, nil
+	return height
 }
 
 // note: we could be more efficient and batch things up.
@@ -444,18 +437,15 @@ func (eb *ElectrumBackend) processAddrRequest(node *electrum.Node, addr *deriver
 }
 
 func (eb *ElectrumBackend) cacheTxs(txs []*electrum.Transaction) {
+	eb.transactionsMu.Lock()
+	defer eb.transactionsMu.Unlock()
+
 	for _, tx := range txs {
-		eb.transactionsMu.Lock()
 		height, exists := eb.transactions[tx.Hash]
-		if exists {
-			if height != int64(tx.Height) {
-				panic(fmt.Sprintf("inconsistent cache: %s %d != %d", tx.Hash, height, tx.Height))
-			}
-			eb.transactionsMu.Unlock()
-			return
+		if exists && (height != int64(tx.Height)) {
+			panic(fmt.Sprintf("inconsistent cache: %s %d != %d", tx.Hash, height, tx.Height))
 		}
 		eb.transactions[tx.Hash] = int64(tx.Height)
-		eb.transactionsMu.Unlock()
 	}
 }
 
