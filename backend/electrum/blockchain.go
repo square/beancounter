@@ -226,7 +226,9 @@ func (n *Node) BlockchainAddressGetHistory(address string) ([]*Transaction, erro
 // https://electrumx.readthedocs.io/en/latest/protocol-methods.html#blockchain-transaction-get
 func (n *Node) BlockchainTransactionGet(txid string) (string, error) {
 	var hex string
-	err := n.request("blockchain.transaction.get", []interface{}{txid, false}, &hex)
+	// some servers don't handle the second parameter (even though they advertise version 1.2)
+	// so we leave it out.
+	err := n.request("blockchain.transaction.get", []interface{}{txid}, &hex)
 	return hex, err
 }
 

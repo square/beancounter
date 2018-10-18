@@ -33,7 +33,8 @@ import (
 // balance and transaction history information for a given address.
 // ElectrumBackend implements Backend interface.
 type ElectrumBackend struct {
-	chainHeight uint32
+	blockHeight uint32
+	addr, port  string
 
 	// peer management
 	nodeMu sync.RWMutex // mutex to guard reads/writes to nodes map
@@ -77,12 +78,14 @@ var (
 // NewElectrumBackend returns a new ElectrumBackend structs or errors.
 // Initially connects to 1 node. A background job handles connecting to
 // additional peers. The background job fails if there are no peers left.
-func NewElectrumBackend(addr, port string, network Network) (*ElectrumBackend, error) {
-
+func NewElectrumBackend(addr, port string, network Network) *ElectrumBackend {
 	// TODO: should the channels have k * maxPeers buffers? Each node needs to enqueue a
 	// potentially large number of transactions. If all nodes are doing that at the same time,
 	// there's a deadlock risk?
-	eb := &ElectrumBackend{
+	return &ElectrumBackend{
+		blockHeight:      0,
+		addr:             addr,
+		port:             port,
 		nodes:            make(map[string]*electrum.Node),
 		blacklistedNodes: make(map[string]struct{}),
 		network:          network,
@@ -97,18 +100,55 @@ func NewElectrumBackend(addr, port string, network Network) (*ElectrumBackend, e
 		transactions:  make(map[string]int64),
 		doneCh:        make(chan bool),
 	}
+}
 
-	// Connect to a node to fetch the height
-	height, err := eb.getHeight(addr, port, network)
+// Connect to a node without registering it, fetch height and disconnect.
+func (eb *ElectrumBackend) ChainHeight() uint32 {
+	log.Printf("connecting to %s:%s", eb.addr, eb.port)
+	node, err := electrum.NewNode(eb.addr, eb.port, eb.network)
 	if err != nil {
-		return nil, err
+		PanicOnError(err)
 	}
-	eb.chainHeight = height
+	defer node.Disconnect()
+
+	// Get the server's features
+	feature, err := node.ServerFeatures()
+	if err != nil {
+		PanicOnError(err)
+	}
+	// Check genesis block
+	if feature.Genesis != GenesisBlock(eb.network) {
+		log.Panicf("incorrect genesis block")
+	}
+	// TODO: check pruning. Currently, servers currently don't prune, so it's fine to skip for now.
+
+	// Check version
+	err = checkVersion(feature.Protocol)
+	if err != nil {
+		PanicOnError(err)
+	}
+
+	// Negotiate version
+	err = node.ServerVersion("1.2")
+	if err != nil {
+		PanicOnError(err)
+	}
+
+	header, err := node.BlockchainHeadersSubscribe()
+	if err != nil {
+		PanicOnError(err)
+	}
+
+	return header.Height
+}
+
+func (eb *ElectrumBackend) Start(blockHeight uint32) error {
+	eb.blockHeight = blockHeight
 
 	// Connect to a node and handle requests
-	if err := eb.addNode(addr, port, network); err != nil {
-		fmt.Printf("failed to connect to initial node: %+v", err)
-		return nil, err
+	if err := eb.addNode(eb.addr, eb.port, eb.network); err != nil {
+		log.Printf("failed to connect to initial node: %+v", err)
+		return err
 	}
 
 	// goroutine to continuously fetch additional peers
@@ -124,7 +164,7 @@ func NewElectrumBackend(addr, port string, network Network) (*ElectrumBackend, e
 		}
 	}()
 
-	return eb, nil
+	return nil
 }
 
 // AddrRequest schedules a request to the backend to lookup information related
@@ -173,14 +213,11 @@ func (eb *ElectrumBackend) Finish() {
 	// program is going to terminate soon anyways.
 }
 
-func (eb *ElectrumBackend) ChainHeight() uint32 {
-	return eb.chainHeight
-}
-
 // Connect to a node and add it to the map of nodes
 func (eb *ElectrumBackend) addNode(addr, port string, network Network) error {
 	ident := electrum.NodeIdent(addr, port)
 
+	// note: this code contains a TOCTOU bug. We risk connecting to the same node multiple times.
 	eb.nodeMu.RLock()
 	_, existsGood := eb.nodes[ident]
 	_, existsBad := eb.blacklistedNodes[ident]
@@ -422,8 +459,9 @@ func (eb *ElectrumBackend) processAddrRequest(node *electrum.Node, addr *deriver
 
 	txHashes := make([]string, 0, len(txs))
 	for _, tx := range txs {
-		txHashes = append(txHashes, tx.Hash)
-		// fetch additional data if needed
+		if tx.Height > 0 && tx.Height <= eb.blockHeight {
+			txHashes = append(txHashes, tx.Hash)
+		}
 	}
 	eb.cacheTxs(txs)
 
@@ -443,7 +481,7 @@ func (eb *ElectrumBackend) cacheTxs(txs []*electrum.Transaction) {
 	for _, tx := range txs {
 		height, exists := eb.transactions[tx.Hash]
 		if exists && (height != int64(tx.Height)) {
-			log.Panicf("inconsistent cache: %s %d != %d", tx.Hash, height, tx.Height)
+			log.Panicf("inconsistent transactions cache: %s %d != %d", tx.Hash, height, tx.Height)
 		}
 		eb.transactions[tx.Hash] = int64(tx.Height)
 	}
@@ -495,19 +533,19 @@ func (eb *ElectrumBackend) findPeers() {
 
 func (eb *ElectrumBackend) addPeer(peer electrum.Peer) {
 	if strings.HasSuffix(peer.Host, ".onion") {
-		log.Printf("skipping %s because of .onion\n", peer.Host)
+		log.Printf("skipping %s because of .onion", peer.Host)
 		return
 	}
 	err := checkVersion(peer.Version)
 	if err != nil {
-		log.Printf("skipping %s because of protocol version %s\n", peer.Host, peer.Version)
+		log.Printf("skipping %s because of protocol version %s", peer.Host, peer.Version)
 		return
 	}
 	for _, feature := range peer.Features {
 		if strings.HasPrefix(feature, "t") {
 			go func(addr, feature string, network Network) {
 				if err := eb.addNode(addr, feature, network); err != nil {
-					log.Printf("error on addNode: %+v\n", err)
+					log.Printf("error on addNode: %+v", err)
 				}
 			}(peer.IP, feature, eb.network)
 			return
@@ -517,11 +555,11 @@ func (eb *ElectrumBackend) addPeer(peer electrum.Peer) {
 		if strings.HasPrefix(feature, "s") {
 			go func(addr, feature string, network Network) {
 				if err := eb.addNode(addr, feature, network); err != nil {
-					log.Printf("error on addNode: %+v\n", err)
+					log.Printf("error on addNode: %+v", err)
 				}
 			}(peer.IP, feature, eb.network)
 			return
 		}
 	}
-	log.Printf("skipping %s because of feature mismatch: %+v\n", peer, peer.Features)
+	log.Printf("skipping %s because of feature mismatch: %+v", peer, peer.Features)
 }

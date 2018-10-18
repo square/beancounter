@@ -96,8 +96,7 @@ func doKeytree() {
 	// Check that all the addresses have the same prefix
 	for i := 1; i < *keytreeN; i++ {
 		if xpubs[0][0:4] != xpubs[i][0:4] {
-			fmt.Printf("Prefixes must match: %s %s\n", xpubs[0], xpubs[i])
-			return
+			log.Panicf("Prefixes must match: %s %s", xpubs[0], xpubs[i])
 		}
 	}
 
@@ -143,8 +142,7 @@ func doFindAddr() {
 	// Check that all the addresses have the same prefix
 	for i := 1; i < *findAddrN; i++ {
 		if xpubs[0][0:4] != xpubs[i][0:4] {
-			fmt.Printf("Prefixes must match: %s %s\n", xpubs[0], xpubs[i])
-			return
+			log.Panicf("Prefixes must match: %s %s", xpubs[0], xpubs[i])
 		}
 	}
 	network := XpubToNetwork(xpubs[0])
@@ -163,7 +161,7 @@ func doFindAddr() {
 			}
 		}
 	}
-	fmt.Printf("not found\n")
+	log.Panic("not found")
 }
 
 func doFindBlock() {
@@ -206,6 +204,7 @@ func doComputeBalance() {
 	if *computeBalanceType == "single-address" {
 		fmt.Printf("Enter single address:\n")
 		singleAddress, _ = reader.ReadString('\n')
+		singleAddress = strings.TrimSpace(singleAddress)
 		network = AddressToNetwork(singleAddress)
 	} else {
 		for i := 0; i < *computeBalanceN; i++ {
@@ -228,14 +227,17 @@ func doComputeBalance() {
 	backend, err := computeBalanceBuildBackend(network)
 	PanicOnError(err)
 
-	// If blockHeight is 0, we default to current height - 6.
+	// If blockHeight is 0, we default to current height - 5.
+	chainHeight := backend.ChainHeight()
 	if *computeBalanceBlockHeight == 0 {
-		*computeBalanceBlockHeight = backend.ChainHeight() - minConfirmations
+		*computeBalanceBlockHeight = chainHeight - minConfirmations + 1
 	}
-	if *computeBalanceBlockHeight > backend.ChainHeight()-minConfirmations {
-		log.Panicf("blockHeight %d is too high (> %d - %d)", *computeBalanceBlockHeight, backend.ChainHeight(), minConfirmations)
+	if *computeBalanceBlockHeight > chainHeight-minConfirmations+1 {
+		log.Panicf("blockHeight %d is too high (> %d - %d + 1)", *computeBalanceBlockHeight, backend.ChainHeight(), minConfirmations)
 	}
 	fmt.Printf("Going to compute balance at %d\n", *computeBalanceBlockHeight)
+
+	backend.Start(*computeBalanceBlockHeight)
 
 	tb := accounter.New(backend, deriver, *computeBalanceLookahead, *computeBalanceBlockHeight)
 
@@ -246,102 +248,72 @@ func doComputeBalance() {
 
 // TODO: copy-pasta
 func findBlockBuildBackend(network Network) (backend.Backend, error) {
-	var b backend.Backend
-	var err error
 	switch *findBlockBackend {
 	case "electrum":
 		addr, port := GetDefaultServer(network, Electrum, *findBlockAddr)
-		b, err = backend.NewElectrumBackend(addr, port, network)
-		if err != nil {
-			return nil, err
-		}
+		return backend.NewElectrumBackend(addr, port, network), nil
 	case "btcd":
 		addr, port := GetDefaultServer(network, Btcd, *findBlockAddr)
-		b, err = backend.NewBtcdBackend(addr, port, *findBlockRpcUser, *findBlockRpcPass, network)
-		if err != nil {
-			return nil, err
-		}
+		return backend.NewBtcdBackend(addr, port, *findBlockRpcUser, *findBlockRpcPass, network)
 	case "electrum-recorder":
 		if *findBlockFixtureFile == "" {
 			panic("electrum-recorder backend requires output --fixture-file.")
 		}
 		addr, port := GetDefaultServer(network, Electrum, *findBlockAddr)
-		b, err = backend.NewElectrumBackend(addr, port, network)
-		if err != nil {
-			return nil, err
-		}
-		b, err = backend.NewRecorderBackend(b, *findBlockFixtureFile)
+		b := backend.NewElectrumBackend(addr, port, network)
+		return backend.NewRecorderBackend(b, *findBlockFixtureFile), nil
 	case "btcd-recorder":
 		if *findBlockFixtureFile == "" {
 			panic("btcd-recorder backend requires output --fixture-file.")
 		}
 		addr, port := GetDefaultServer(network, Btcd, *findBlockAddr)
-		b, err = backend.NewBtcdBackend(addr, port, *findBlockRpcUser, *findBlockRpcPass, network)
+		b, err := backend.NewBtcdBackend(addr, port, *findBlockRpcUser, *findBlockRpcPass, network)
 		if err != nil {
 			return nil, err
 		}
-		b, err = backend.NewRecorderBackend(b, *findBlockFixtureFile)
+		return backend.NewRecorderBackend(b, *findBlockFixtureFile), nil
 	case "fixture":
 		if *findBlockFixtureFile == "" {
 			panic("fixture backend requires input --fixture-file.")
 		}
-		b, err = backend.NewFixtureBackend(*findBlockFixtureFile)
-		if err != nil {
-			return nil, err
-		}
+		return backend.NewFixtureBackend(*findBlockFixtureFile)
 	default:
 		return nil, fmt.Errorf("unreachable")
 	}
-	return b, err
 }
 
 // TODO: return *backend.Backend, error instead?
 func computeBalanceBuildBackend(network Network) (backend.Backend, error) {
-	var b backend.Backend
-	var err error
 	switch *computeBalanceBackend {
 	case "electrum":
 		addr, port := GetDefaultServer(network, Electrum, *computeBalanceAddr)
-		b, err = backend.NewElectrumBackend(addr, port, network)
-		if err != nil {
-			return nil, err
-		}
+		return backend.NewElectrumBackend(addr, port, network), nil
 	case "btcd":
 		addr, port := GetDefaultServer(network, Btcd, *computeBalanceAddr)
-		b, err = backend.NewBtcdBackend(addr, port, *computeBalanceRpcUser, *computeBalanceRpcPass, network)
-		if err != nil {
-			return nil, err
-		}
+		return backend.NewBtcdBackend(addr, port, *computeBalanceRpcUser, *computeBalanceRpcPass, network)
 	case "electrum-recorder":
 		if *computeBalanceFixtureFile == "" {
 			panic("electrum-recorder backend requires output --fixture-file.")
 		}
 		addr, port := GetDefaultServer(network, Electrum, *computeBalanceAddr)
-		b, err = backend.NewElectrumBackend(addr, port, network)
-		if err != nil {
-			return nil, err
-		}
-		b, err = backend.NewRecorderBackend(b, *computeBalanceFixtureFile)
+		b := backend.NewElectrumBackend(addr, port, network)
+		return backend.NewRecorderBackend(b, *computeBalanceFixtureFile), nil
 	case "btcd-recorder":
 		if *computeBalanceFixtureFile == "" {
 			panic("btcd-recorder backend requires output --fixture-file.")
 		}
 		addr, port := GetDefaultServer(network, Btcd, *computeBalanceAddr)
-		b, err = backend.NewBtcdBackend(addr, port, *computeBalanceRpcUser, *computeBalanceRpcPass, network)
+		b, err := backend.NewBtcdBackend(addr, port, *computeBalanceRpcUser, *computeBalanceRpcPass, network)
 		if err != nil {
 			return nil, err
 		}
-		b, err = backend.NewRecorderBackend(b, *computeBalanceFixtureFile)
+		return backend.NewRecorderBackend(b, *computeBalanceFixtureFile), nil
 	case "fixture":
 		if *computeBalanceFixtureFile == "" {
 			panic("fixture backend requires input --fixture-file.")
 		}
-		b, err = backend.NewFixtureBackend(*computeBalanceFixtureFile)
-		if err != nil {
-			return nil, err
-		}
+		return backend.NewFixtureBackend(*computeBalanceFixtureFile)
 	default:
 		return nil, fmt.Errorf("unreachable")
 	}
-	return b, err
 }

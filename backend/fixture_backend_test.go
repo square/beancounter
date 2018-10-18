@@ -54,11 +54,8 @@ func TestNoAddress(t *testing.T) {
 
 	fetchResults(b, &addrs, &txs, 100*time.Millisecond)
 
-	// we don't know if address is legit or not, we just know if the address shows up
-	// in the blockchain. The default behavior is just to return the address with no transactions
-	assert.Len(t, addrs, 1)
-	assert.False(t, addrs[0].HasTransactions())
-	assert.Equal(t, "BAD_ADDRESS", addrs[0].Address.String())
+	// The address has no transactions, so it gets pruned.
+	assert.Len(t, addrs, 0)
 	assert.Len(t, txs, 0)
 }
 
