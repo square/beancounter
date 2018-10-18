@@ -76,3 +76,29 @@ func TestVerifyMandN(t *testing.T) {
 	assert.Nil(t, VerifyMandN(5, 20))
 	assert.Nil(t, VerifyMandN(20, 20))
 }
+
+func TestGetDefaultServer(t *testing.T) {
+	host, port := GetDefaultServer(Testnet, Electrum, "foobar:s1234")
+	assert.Equal(t, "foobar", host)
+	assert.Equal(t, "s1234", port)
+
+	host, port = GetDefaultServer(Testnet, Electrum, "192.0.2.5:s1234")
+	assert.Equal(t, "192.0.2.5", host)
+	assert.Equal(t, "s1234", port)
+
+	host, port = GetDefaultServer(Testnet, Electrum, "[2001:db8::1]:s1234")
+	assert.Equal(t, "2001:db8::1", host)
+	assert.Equal(t, "s1234", port)
+
+	host, port = GetDefaultServer(Testnet, Btcd, "foobar:1234")
+	assert.Equal(t, "foobar", host)
+	assert.Equal(t, "1234", port)
+
+	host, port = GetDefaultServer(Testnet, Electrum, "")
+	assert.NotEqual(t, "localhost", host)
+	assert.Equal(t, "s50102", port)
+
+	host, port = GetDefaultServer(Testnet, Btcd, "")
+	assert.Equal(t, "localhost", host)
+	assert.Equal(t, "18334", port)
+}

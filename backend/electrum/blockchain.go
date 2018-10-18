@@ -139,6 +139,7 @@ func NewNode(addr, port string, network utils.Network) (*Node, error) {
 	}
 
 	if port[0] == 't' {
+		// TCP
 		var p string
 		if len(port) == 1 {
 			p = defaultTCP
@@ -147,6 +148,7 @@ func NewNode(addr, port string, network utils.Network) (*Node, error) {
 		}
 		t, err = NewTCPTransport(fmt.Sprintf("%s:%s", a, p))
 	} else if port[0] == 's' {
+		// TLS
 		var p string
 		if len(port) == 1 {
 			p = defaultSSL
@@ -154,6 +156,8 @@ func NewNode(addr, port string, network utils.Network) (*Node, error) {
 			p = port[1:]
 		}
 		t, err = NewSSLTransport(fmt.Sprintf("%s:%s", a, p))
+	} else {
+		panic(fmt.Sprintf("port (%s) must start with t or s", port))
 	}
 
 	if err != nil {

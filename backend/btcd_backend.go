@@ -57,9 +57,9 @@ const (
 // BtcdBackend is meants to connect to a personal Btcd node (because public nodes don't expose the
 // API we need). There's no TLS support. If your node is not co-located with Beancounter, we
 // recommend wrapping your connection in a ssh or other secure tunnel.
-func NewBtcdBackend(hostPort, user, pass string, network utils.Network) (*BtcdBackend, error) {
+func NewBtcdBackend(host, port, user, pass string, network utils.Network) (*BtcdBackend, error) {
 	connCfg := &rpcclient.ConnConfig{
-		Host:         hostPort,
+		Host:         fmt.Sprintf("%s:%s", host, port),
 		User:         user,
 		Pass:         pass,
 		HTTPPostMode: true, // Bitcoin core only supports HTTP POST mode

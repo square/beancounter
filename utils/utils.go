@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"net"
 
 	"github.com/btcsuite/btcd/chaincfg"
 )
@@ -24,6 +25,14 @@ func Max(num uint32, nums ...uint32) uint32 {
 }
 
 type Network string
+type Backend string
+
+const (
+	Mainnet  Network = "mainnet"
+	Testnet  Network = "testnet"
+	Electrum Backend = "electrum"
+	Btcd     Backend = "btcd"
+)
 
 // ChainConfig returns a given chaincfg.Params for a given Network
 func (n Network) ChainConfig() *chaincfg.Params {
@@ -94,7 +103,34 @@ func VerifyMandN(m int, n int) error {
 	return nil
 }
 
-const (
-	Mainnet Network = "mainnet"
-	Testnet Network = "testnet"
-)
+// Picks a default server for electrum or localhost for btcd
+// Returns a pair of hostname:port (or pseudo-port for electrum)
+func GetDefaultServer(network Network, backend Backend, addr string) (string, string) {
+	if addr != "" {
+		host, port, err := net.SplitHostPort(addr)
+		PanicOnError(err)
+		return host, port
+	}
+	switch backend {
+	case Electrum:
+		switch network {
+		case "mainnet":
+			return "electrum.petrkr.net", "s50002"
+		case "testnet":
+			return "electrum_testnet_unlimited.criptolayer.net", "s50102"
+		default:
+			panic("unreachable")
+		}
+	case Btcd:
+		switch network {
+		case "mainnet":
+			return "localhost", "8334"
+		case "testnet":
+			return "localhost", "18334"
+		default:
+			panic("unreachable")
+		}
+	default:
+		panic("unreachable")
+	}
+}
