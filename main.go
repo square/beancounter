@@ -61,7 +61,7 @@ const (
 )
 
 func main() {
-	app.Version("0.0.2")
+	app.Version("0.0.3")
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case keytree.FullCommand():
 		doKeytree()
