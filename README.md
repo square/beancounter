@@ -20,7 +20,7 @@ Getting Started
 
 Installing
 ----------
-If missing, install [https://github.com/golang/dep](dep)
+If missing, install [https://github.com/golang/dep](https://github.com/golang/dep)
 
 ```
 $ git clone https://github.com/square/beancounter/
@@ -67,7 +67,7 @@ Balance: 111168038
 Compute balance of a HD wallet (using Btcd)
 -------------------------------------------
 
-[https://github.com/btcsuite/btcd](Btcd) contains information on how to setup a node.
+[https://github.com/btcsuite/btcd](https://github.com/btcsuite/btcd) contains information on how to setup a node.
 
 Beancounter requires `addrindex=1`, `txindex=1`, and `notls=1`. If your node is on a remote server,
 we recommend tunneling the RPC traffic over ssh or some other secure tunnel.
