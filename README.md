@@ -44,8 +44,8 @@ Child pubkey #1: tpubDBrCAXucLxvjC9n9nZGGcYS8pk4X1N97YJmUgdDSwG2p36gbSqeRuytHYCH
 
 We can then use `tpubDBrCAXucLxvj...` to compute the balance.
 
-Compute balance (using Electrum)
---------------------------------
+Compute balance of a HD wallet (using Electrum)
+-----------------------------------------------
 ```
 $ ./beancounter compute-balance --type multisig --block-height 1438791
 Enter pubkey #1 out of #1:
@@ -54,8 +54,18 @@ tpubDBrCAXucLxvjC9n9nZGGcYS8pk4X1N97YJmUgdDSwG2p36gbSqeRuytHYCHe2dHxLsV2EchX9ePa
 Balance: 267893477
 ```
 
-Compute balance (using Btcd)
-----------------------------
+Compute balance of a single address (using Electrum)
+----------------------------------------------------
+```
+$ ./beancounter compute-balance --type single-address --lookahead 1 --block-height 1438791
+Enter single address:
+mzoeuyGqMudyvKbkNx5dtNBNN59oKEAsPn
+...
+Balance: 111168038
+```
+
+Compute balance of a HD wallet (using Btcd)
+-------------------------------------------
 
 [https://github.com/btcsuite/btcd](Btcd) contains information on how to setup a node.
 
