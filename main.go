@@ -7,9 +7,7 @@ import (
 	"github.com/square/beancounter/blockfinder"
 	"log"
 	"math"
-	"net"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -37,7 +35,7 @@ var (
 	findBlock            = app.Command("find-block", "Finds the block height for a given date/time.")
 	findBlockTimestamp   = findBlock.Arg("timestamp", "Date/time to resolve. E.g. \"2006-01-02 15:04:05 MST\"").Required().String()
 	findBlockBackend     = findBlock.Flag("backend", "electrum | btcd | electrum-recorder | btcd-recorder | fixture").Default("electrum").Enum("electrum", "btcd", "electrum-recorder", "btcd-recorder", "fixture")
-	findBlockAddr        = findBlock.Flag("addr", "Backend to connect to initially. Defaults to a hardcoded node for Electrum and localhost for Btcd.").PlaceHolder("HOST:PORT").TCP()
+	findBlockAddr        = findBlock.Flag("addr", "Backend to connect to initially. Defaults to a hardcoded node for Electrum and localhost for Btcd.").PlaceHolder("HOST:PORT").String()
 	findBlockRpcUser     = findBlock.Flag("rpcuser", "RPC username").PlaceHolder("USER").String()
 	findBlockRpcPass     = findBlock.Flag("rpcpass", "RPC password").PlaceHolder("PASSWORD").String()
 	findBlockFixtureFile = findBlock.Flag("fixture-file", "Fixture file to use for recording or replaying data.").PlaceHolder("FILEPATH").String()
@@ -48,7 +46,7 @@ var (
 	computeBalanceM           = computeBalance.Flag("m", "number of signatures (quorum)").Short('m').Default("1").Int()
 	computeBalanceN           = computeBalance.Flag("n", "number of public keys").Short('n').Default("1").Int()
 	computeBalanceBackend     = computeBalance.Flag("backend", "electrum | btcd | electrum-recorder | btcd-recorder | fixture").Default("electrum").Enum("electrum", "btcd", "electrum-recorder", "btcd-recorder", "fixture")
-	computeBalanceAddr        = computeBalance.Flag("addr", "Backend to connect to initially. Defaults to a hardcoded node for Electrum and localhost for Btcd.").PlaceHolder("HOST:PORT").TCP()
+	computeBalanceAddr        = computeBalance.Flag("addr", "Backend to connect to initially. Defaults to a hardcoded node for Electrum and localhost for Btcd.").PlaceHolder("HOST:PORT").String()
 	computeBalanceRpcUser     = computeBalance.Flag("rpcuser", "RPC username").PlaceHolder("USER").String()
 	computeBalanceRpcPass     = computeBalance.Flag("rpcpass", "RPC password").PlaceHolder("PASSWORD").String()
 	computeBalanceFixtureFile = computeBalance.Flag("fixture-file", "Fixture file to use for recording or replaying data.").PlaceHolder("FILEPATH").String()
@@ -252,14 +250,14 @@ func findBlockBuildBackend(network Network) (backend.Backend, error) {
 	var err error
 	switch *findBlockBackend {
 	case "electrum":
-		addr, port := getServer(network, *findBlockAddr)
+		addr, port := GetDefaultServer(network, Electrum, *findBlockAddr)
 		b, err = backend.NewElectrumBackend(addr, port, network)
 		if err != nil {
 			return nil, err
 		}
 	case "btcd":
-		b, err = backend.NewBtcdBackend((**findBlockAddr).String(), *findBlockRpcUser,
-			*findBlockRpcPass, network)
+		addr, port := GetDefaultServer(network, Btcd, *findBlockAddr)
+		b, err = backend.NewBtcdBackend(addr, port, *findBlockRpcUser, *findBlockRpcPass, network)
 		if err != nil {
 			return nil, err
 		}
@@ -267,7 +265,7 @@ func findBlockBuildBackend(network Network) (backend.Backend, error) {
 		if *findBlockFixtureFile == "" {
 			panic("electrum-recorder backend requires output --fixture-file.")
 		}
-		addr, port := getServer(network, *findBlockAddr)
+		addr, port := GetDefaultServer(network, Electrum, *findBlockAddr)
 		b, err = backend.NewElectrumBackend(addr, port, network)
 		if err != nil {
 			return nil, err
@@ -277,8 +275,8 @@ func findBlockBuildBackend(network Network) (backend.Backend, error) {
 		if *findBlockFixtureFile == "" {
 			panic("btcd-recorder backend requires output --fixture-file.")
 		}
-		b, err = backend.NewBtcdBackend((*findBlockAddr).String(), *findBlockRpcUser,
-			*findBlockRpcPass, network)
+		addr, port := GetDefaultServer(network, Btcd, *findBlockAddr)
+		b, err = backend.NewBtcdBackend(addr, port, *findBlockRpcUser, *findBlockRpcPass, network)
 		if err != nil {
 			return nil, err
 		}
@@ -303,14 +301,14 @@ func computeBalanceBuildBackend(network Network) (backend.Backend, error) {
 	var err error
 	switch *computeBalanceBackend {
 	case "electrum":
-		addr, port := getServer(network, *computeBalanceAddr)
+		addr, port := GetDefaultServer(network, Electrum, *computeBalanceAddr)
 		b, err = backend.NewElectrumBackend(addr, port, network)
 		if err != nil {
 			return nil, err
 		}
 	case "btcd":
-		b, err = backend.NewBtcdBackend((*computeBalanceAddr).String(), *computeBalanceRpcUser,
-			*computeBalanceRpcPass, network)
+		addr, port := GetDefaultServer(network, Btcd, *computeBalanceAddr)
+		b, err = backend.NewBtcdBackend(addr, port, *computeBalanceRpcUser, *computeBalanceRpcPass, network)
 		if err != nil {
 			return nil, err
 		}
@@ -318,7 +316,7 @@ func computeBalanceBuildBackend(network Network) (backend.Backend, error) {
 		if *computeBalanceFixtureFile == "" {
 			panic("electrum-recorder backend requires output --fixture-file.")
 		}
-		addr, port := getServer(network, *computeBalanceAddr)
+		addr, port := GetDefaultServer(network, Electrum, *computeBalanceAddr)
 		b, err = backend.NewElectrumBackend(addr, port, network)
 		if err != nil {
 			return nil, err
@@ -328,8 +326,8 @@ func computeBalanceBuildBackend(network Network) (backend.Backend, error) {
 		if *computeBalanceFixtureFile == "" {
 			panic("btcd-recorder backend requires output --fixture-file.")
 		}
-		b, err = backend.NewBtcdBackend((*computeBalanceAddr).String(), *computeBalanceRpcUser,
-			*computeBalanceRpcPass, network)
+		addr, port := GetDefaultServer(network, Btcd, *computeBalanceAddr)
+		b, err = backend.NewBtcdBackend(addr, port, *computeBalanceRpcUser, *computeBalanceRpcPass, network)
 		if err != nil {
 			return nil, err
 		}
@@ -346,20 +344,4 @@ func computeBalanceBuildBackend(network Network) (backend.Backend, error) {
 		return nil, fmt.Errorf("unreachable")
 	}
 	return b, err
-}
-
-// pick a default server for each network if none provided
-// TODO: default server should be localhost for Btcd backend.
-func getServer(network Network, addr *net.TCPAddr) (string, string) {
-	if addr != nil {
-		return addr.IP.String(), strconv.Itoa(addr.Port)
-	}
-	switch network {
-	case "mainnet":
-		return "electrum.petrkr.net", "s50002"
-	case "testnet":
-		return "electrum_testnet_unlimited.criptolayer.net", "s50102"
-	default:
-		panic("unreachable")
-	}
 }
