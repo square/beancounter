@@ -5,7 +5,7 @@ import (
 
 	"github.com/square/beancounter/backend"
 	"github.com/square/beancounter/deriver"
-	"github.com/square/beancounter/utils"
+	. "github.com/square/beancounter/utils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -91,7 +91,7 @@ func TestProcessTransactions(t *testing.T) {
 
 func TestComputeBalanceTestnet(t *testing.T) {
 	pubs := []string{"tpubDBrCAXucLxvjC9n9nZGGcYS8pk4X1N97YJmUgdDSwG2p36gbSqeRuytHYCHe2dHxLsV2EchX9ePaFdRwp7cNLrSpnr3PsoPLUQqbvLBDWvh"}
-	deriver := deriver.NewAddressDeriver(utils.Testnet, pubs, 1, "")
+	deriver := deriver.NewAddressDeriver(Testnet, pubs, 1, "")
 	b, err := backend.NewFixtureBackend("testdata/tpub_data.json")
 	assert.NoError(t, err)
 	a := New(b, deriver, 100, 1435169)

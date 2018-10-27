@@ -15,7 +15,7 @@ import (
 	"github.com/square/beancounter/backend/electrum"
 	"github.com/square/beancounter/deriver"
 	"github.com/square/beancounter/reporter"
-	"github.com/square/beancounter/utils"
+	. "github.com/square/beancounter/utils"
 )
 
 // Fetches transaction information from Electrum servers.
@@ -41,7 +41,7 @@ type ElectrumBackend struct {
 	// todo: blacklistedNodes should be a timestamp and we should re-try after a certain amount of
 	// time has elapsed.
 	blacklistedNodes map[string]struct{}
-	network          utils.Network
+	network          Network
 
 	// channels used to communicate with the Accounter
 	addrRequests  chan *deriver.Address
@@ -77,7 +77,7 @@ var (
 // NewElectrumBackend returns a new ElectrumBackend structs or errors.
 // Initially connects to 1 node. A background job handles connecting to
 // additional peers. The background job fails if there are no peers left.
-func NewElectrumBackend(addr, port string, network utils.Network) (*ElectrumBackend, error) {
+func NewElectrumBackend(addr, port string, network Network) (*ElectrumBackend, error) {
 
 	// TODO: should the channels have k * maxPeers buffers? Each node needs to enqueue a
 	// potentially large number of transactions. If all nodes are doing that at the same time,
@@ -178,7 +178,7 @@ func (eb *ElectrumBackend) ChainHeight() uint32 {
 }
 
 // Connect to a node and add it to the map of nodes
-func (eb *ElectrumBackend) addNode(addr, port string, network utils.Network) error {
+func (eb *ElectrumBackend) addNode(addr, port string, network Network) error {
 	ident := electrum.NodeIdent(addr, port)
 
 	eb.nodeMu.RLock()
@@ -211,7 +211,7 @@ func (eb *ElectrumBackend) addNode(addr, port string, network utils.Network) err
 		return err
 	}
 	// Check genesis block
-	if feature.Genesis != utils.GenesisBlock(network) {
+	if feature.Genesis != GenesisBlock(network) {
 		eb.nodeMu.Lock()
 		eb.blacklistedNodes[ident] = struct{}{}
 		eb.nodeMu.Unlock()
@@ -251,7 +251,7 @@ func (eb *ElectrumBackend) addNode(addr, port string, network utils.Network) err
 }
 
 // Connect to a node without registering it, fetch height and disconnect.
-func (eb *ElectrumBackend) getHeight(addr, port string, network utils.Network) (uint32, error) {
+func (eb *ElectrumBackend) getHeight(addr, port string, network Network) (uint32, error) {
 	log.Printf("connecting to %s", addr)
 	node, err := electrum.NewNode(addr, port, network)
 	if err != nil {
@@ -265,7 +265,7 @@ func (eb *ElectrumBackend) getHeight(addr, port string, network utils.Network) (
 		return 0, err
 	}
 	// Check genesis block
-	if feature.Genesis != utils.GenesisBlock(network) {
+	if feature.Genesis != GenesisBlock(network) {
 		return 0, ErrIncorrectGenesisBlock
 	}
 	// TODO: check pruning. Currently, servers currently don't prune, so it's fine to skip for now.
@@ -505,7 +505,7 @@ func (eb *ElectrumBackend) addPeer(peer electrum.Peer) {
 	}
 	for _, feature := range peer.Features {
 		if strings.HasPrefix(feature, "t") {
-			go func(addr, feature string, network utils.Network) {
+			go func(addr, feature string, network Network) {
 				if err := eb.addNode(addr, feature, network); err != nil {
 					log.Printf("error on addNode: %+v\n", err)
 				}
@@ -515,7 +515,7 @@ func (eb *ElectrumBackend) addPeer(peer electrum.Peer) {
 	}
 	for _, feature := range peer.Features {
 		if strings.HasPrefix(feature, "s") {
-			go func(addr, feature string, network utils.Network) {
+			go func(addr, feature string, network Network) {
 				if err := eb.addNode(addr, feature, network); err != nil {
 					log.Printf("error on addNode: %+v\n", err)
 				}

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/bcext/cashutil"
-	"github.com/square/beancounter/utils"
+	. "github.com/square/beancounter/utils"
 )
 
 const (
@@ -19,7 +19,7 @@ const (
 type Node struct {
 	// Ident is a an identifier of the form 127.0.0.1|s1234 or ::1|t5432.
 	Ident   string
-	Network utils.Network
+	Network Network
 
 	transport Transport
 
@@ -125,7 +125,7 @@ type Block struct {
 	Max   uint   `json:"max"`
 }
 
-func NewNode(addr, port string, network utils.Network) (*Node, error) {
+func NewNode(addr, port string, network Network) (*Node, error) {
 	n := &Node{}
 	var a string
 	var t Transport
@@ -300,11 +300,11 @@ func (n *Node) request(method string, params []interface{}, result interface{}) 
 	return nil
 }
 
-func defaultPorts(network utils.Network) (string, string) {
+func defaultPorts(network Network) (string, string) {
 	switch network {
-	case utils.Mainnet:
+	case Mainnet:
 		return "50001", "50002"
-	case utils.Testnet:
+	case Testnet:
 		return "50101", "50102"
 	default:
 		panic("unreachable")

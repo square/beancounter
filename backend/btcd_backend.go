@@ -11,7 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/square/beancounter/deriver"
 	"github.com/square/beancounter/reporter"
-	"github.com/square/beancounter/utils"
+	. "github.com/square/beancounter/utils"
 )
 
 // BtcdBackend wraps Btcd node and its API to provide a simple
@@ -21,7 +21,7 @@ type BtcdBackend struct {
 	chainHeight uint32
 
 	client            *rpcclient.Client
-	network           utils.Network
+	network           Network
 	blockHeightMu     sync.Mutex // mutex to guard read/writes to blockHeightLookup map
 	blockHeightLookup map[string]int64
 
@@ -58,7 +58,7 @@ const (
 // BtcdBackend is meants to connect to a personal Btcd node (because public nodes don't expose the
 // API we need). There's no TLS support. If your node is not co-located with Beancounter, we
 // recommend wrapping your connection in a ssh or other secure tunnel.
-func NewBtcdBackend(host, port, user, pass string, network utils.Network) (*BtcdBackend, error) {
+func NewBtcdBackend(host, port, user, pass string, network Network) (*BtcdBackend, error) {
 	connCfg := &rpcclient.ConnConfig{
 		Host:         fmt.Sprintf("%s:%s", host, port),
 		User:         user,
@@ -76,8 +76,8 @@ func NewBtcdBackend(host, port, user, pass string, network utils.Network) (*Btcd
 	if err != nil {
 		return nil, errors.Wrap(err, "GetBlockHash(0) failed")
 	}
-	if genesis.String() != utils.GenesisBlock(network) {
-		return nil, errors.Errorf("Unexpected genesis block %s != %s", genesis.String(), utils.GenesisBlock(network))
+	if genesis.String() != GenesisBlock(network) {
+		return nil, errors.Errorf("Unexpected genesis block %s != %s", genesis.String(), GenesisBlock(network))
 	}
 
 	height, err := client.GetBlockCount()
