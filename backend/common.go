@@ -1,7 +1,7 @@
 package backend
 
 import (
-	"github.com/square/beancounter/utils"
+	. "github.com/square/beancounter/utils"
 	"time"
 )
 
@@ -20,12 +20,12 @@ type metadata struct {
 }
 
 type address struct {
-	Address      string        `json:"address"`
-	Path         string        `json:"path"`
-	Network      utils.Network `json:"network"`
-	Change       uint32        `json:"change"`
-	AddressIndex uint32        `json:"addr_index"`
-	TxHashes     []string      `json:"tx_hashes"`
+	Address      string   `json:"address"`
+	Path         string   `json:"path"`
+	Network      Network  `json:"network"`
+	Change       uint32   `json:"change"`
+	AddressIndex uint32   `json:"addr_index"`
+	TxHashes     []string `json:"tx_hashes"`
 }
 
 type byAddress []address

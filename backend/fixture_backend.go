@@ -75,114 +75,114 @@ func NewFixtureBackend(filepath string) (*FixtureBackend, error) {
 
 // AddrRequest schedules a request to the backend to lookup information related
 // to the given address.
-func (b *FixtureBackend) AddrRequest(addr *deriver.Address) {
+func (fb *FixtureBackend) AddrRequest(addr *deriver.Address) {
 	reporter.GetInstance().IncAddressesScheduled()
 	reporter.GetInstance().Logf("[fixture] scheduling address: %s", addr)
-	b.addrRequests <- addr
+	fb.addrRequests <- addr
 }
 
 // TxRequest schedules a request to the backend to lookup information related
 // to the given transaction hash.
-func (b *FixtureBackend) TxRequest(txHash string) {
+func (fb *FixtureBackend) TxRequest(txHash string) {
 	reporter.GetInstance().IncTxScheduled()
 	reporter.GetInstance().Logf("[fixture] scheduling tx: %s", txHash)
-	b.txRequests <- txHash
+	fb.txRequests <- txHash
 }
 
-func (b *FixtureBackend) BlockRequest(height uint32) {
-	b.blockRequests <- height
+func (fb *FixtureBackend) BlockRequest(height uint32) {
+	fb.blockRequests <- height
 }
 
 // AddrResponses exposes a channel that allows to consume backend's responses to
 // address requests created with AddrRequest()
-func (b *FixtureBackend) AddrResponses() <-chan *AddrResponse {
-	return b.addrResponses
+func (fb *FixtureBackend) AddrResponses() <-chan *AddrResponse {
+	return fb.addrResponses
 }
 
 // TxResponses exposes a channel that allows to consume backend's responses to
 // address requests created with addrrequest().
 // if an address has any transactions then they will be sent to this channel by the
 // backend.
-func (b *FixtureBackend) TxResponses() <-chan *TxResponse {
-	return b.txResponses
+func (fb *FixtureBackend) TxResponses() <-chan *TxResponse {
+	return fb.txResponses
 }
 
-func (b *FixtureBackend) BlockResponses() <-chan *BlockResponse {
-	return b.blockResponses
+func (fb *FixtureBackend) BlockResponses() <-chan *BlockResponse {
+	return fb.blockResponses
 }
 
 // Finish informs the backend to stop doing its work.
-func (b *FixtureBackend) Finish() {
-	close(b.doneCh)
+func (fb *FixtureBackend) Finish() {
+	close(fb.doneCh)
 }
 
-func (b *FixtureBackend) ChainHeight() uint32 {
-	return b.height
+func (fb *FixtureBackend) ChainHeight() uint32 {
+	return fb.height
 }
 
-func (b *FixtureBackend) processRequests() {
+func (fb *FixtureBackend) processRequests() {
 	for {
 		select {
-		case addr := <-b.addrRequests:
-			b.processAddrRequest(addr)
-		case tx := <-b.txRequests:
-			b.processTxRequest(tx)
-		case addrResp, ok := <-b.addrResponses:
+		case addr := <-fb.addrRequests:
+			fb.processAddrRequest(addr)
+		case tx := <-fb.txRequests:
+			fb.processTxRequest(tx)
+		case addrResp, ok := <-fb.addrResponses:
 			if !ok {
-				b.addrResponses = nil
+				fb.addrResponses = nil
 				continue
 			}
-			b.addrResponses <- addrResp
-		case txResp, ok := <-b.txResponses:
+			fb.addrResponses <- addrResp
+		case txResp, ok := <-fb.txResponses:
 			if !ok {
-				b.txResponses = nil
+				fb.txResponses = nil
 				continue
 			}
-			b.txResponses <- txResp
-		case block := <-b.blockRequests:
-			b.processBlockRequest(block)
-		case <-b.doneCh:
+			fb.txResponses <- txResp
+		case block := <-fb.blockRequests:
+			fb.processBlockRequest(block)
+		case <-fb.doneCh:
 			return
 		}
 	}
 }
 
-func (b *FixtureBackend) processAddrRequest(addr *deriver.Address) {
-	b.addrIndexMu.Lock()
-	resp, exists := b.addrIndex[addr.String()]
-	b.addrIndexMu.Unlock()
+func (fb *FixtureBackend) processAddrRequest(addr *deriver.Address) {
+	fb.addrIndexMu.Lock()
+	resp, exists := fb.addrIndex[addr.String()]
+	fb.addrIndexMu.Unlock()
 
 	if exists {
-		b.addrResponses <- &resp
+		fb.addrResponses <- &resp
 		return
 	}
 
 	// assuming that address has not been used
-	b.addrResponses <- &AddrResponse{
+	fb.addrResponses <- &AddrResponse{
 		Address: addr,
 	}
 }
 
-func (b *FixtureBackend) processTxRequest(txHash string) {
-	b.txIndexMu.Lock()
-	resp, exists := b.txIndex[txHash]
-	b.txIndexMu.Unlock()
+func (fb *FixtureBackend) processTxRequest(txHash string) {
+	fb.txIndexMu.Lock()
+	resp, exists := fb.txIndex[txHash]
+	fb.txIndexMu.Unlock()
 
 	if exists {
-		b.txResponses <- &resp
+		fb.txResponses <- &resp
 		return
 	}
 
 	// assuming that transaction does not exist in the fixture file
 }
 
-func (b *FixtureBackend) processBlockRequest(height uint32) {
-	b.blockIndexMu.Lock()
-	resp, exists := b.blockIndex[height]
-	b.blockIndexMu.Unlock()
+func (fb *FixtureBackend) processBlockRequest(height uint32) {
+	fb.blockIndexMu.Lock()
+	resp, exists := fb.blockIndex[height]
+	fb.blockIndexMu.Unlock()
 
 	if exists {
-		b.blockResponses <- &resp
+		fb.blockResponses <- &resp
 		return
 	}
 	log.Panicf("fixture doesn't contain block %d", height)

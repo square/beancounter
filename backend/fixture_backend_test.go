@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/square/beancounter/deriver"
-	"github.com/square/beancounter/utils"
+	. "github.com/square/beancounter/utils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -47,7 +47,7 @@ func TestNoAddress(t *testing.T) {
 	b, err := NewFixtureBackend("../accounter/testdata/tpub_data.json")
 	assert.NoError(t, err)
 
-	b.AddrRequest(deriver.NewAddress("m/1'/1/0/1", "BAD_ADDRESS", utils.Testnet, 0, 1))
+	b.AddrRequest(deriver.NewAddress("m/1'/1/0/1", "BAD_ADDRESS", Testnet, 0, 1))
 
 	var addrs []*AddrResponse
 	var txs []*TxResponse
@@ -66,7 +66,7 @@ func TestAddressNoTransactions(t *testing.T) {
 	b, err := NewFixtureBackend("../accounter/testdata/tpub_data.json")
 	assert.NoError(t, err)
 
-	b.AddrRequest(deriver.NewAddress("m/1'/1234/0/61", "mfsNoNz57ANkYrCzHaLZDLoMGujBW8u3zv", utils.Testnet, 0, 61))
+	b.AddrRequest(deriver.NewAddress("m/1'/1234/0/61", "mfsNoNz57ANkYrCzHaLZDLoMGujBW8u3zv", Testnet, 0, 61))
 
 	var addrs []*AddrResponse
 	var txs []*TxResponse
@@ -83,7 +83,7 @@ func TestAddressWithTransactions(t *testing.T) {
 	b, err := NewFixtureBackend("../accounter/testdata/tpub_data.json")
 	assert.NoError(t, err)
 
-	b.AddrRequest(deriver.NewAddress("m/1'/1234/0/7", "mi2udMvJHeeJJNp5wWKToa86L2cJUKzrby", utils.Testnet, 0, 7))
+	b.AddrRequest(deriver.NewAddress("m/1'/1234/0/7", "mi2udMvJHeeJJNp5wWKToa86L2cJUKzrby", Testnet, 0, 7))
 
 	var addrs []*AddrResponse
 	var txs []*TxResponse

@@ -25,13 +25,13 @@ func Max(num uint32, nums ...uint32) uint32 {
 }
 
 type Network string
-type Backend string
+type BackendName string
 
 const (
-	Mainnet  Network = "mainnet"
-	Testnet  Network = "testnet"
-	Electrum Backend = "electrum"
-	Btcd     Backend = "btcd"
+	Mainnet  Network     = "mainnet"
+	Testnet  Network     = "testnet"
+	Electrum BackendName = "electrum"
+	Btcd     BackendName = "btcd"
 )
 
 // ChainConfig returns a given chaincfg.Params for a given Network
@@ -105,7 +105,7 @@ func VerifyMandN(m int, n int) error {
 
 // Picks a default server for electrum or localhost for btcd
 // Returns a pair of hostname:port (or pseudo-port for electrum)
-func GetDefaultServer(network Network, backend Backend, addr string) (string, string) {
+func GetDefaultServer(network Network, backend BackendName, addr string) (string, string) {
 	if addr != "" {
 		host, port, err := net.SplitHostPort(addr)
 		PanicOnError(err)

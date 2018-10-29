@@ -3,7 +3,7 @@ package backend
 import (
 	"github.com/square/beancounter/backend/electrum"
 	"github.com/square/beancounter/deriver"
-	"github.com/square/beancounter/utils"
+	. "github.com/square/beancounter/utils"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -14,7 +14,7 @@ func TestTransactionCache(t *testing.T) {
 	eb := &ElectrumBackend{
 		nodes:            make(map[string]*electrum.Node),
 		blacklistedNodes: make(map[string]struct{}),
-		network:          utils.Testnet,
+		network:          Testnet,
 		addrRequests:     make(chan *deriver.Address, 2*maxPeers),
 		addrResponses:    make(chan *AddrResponse, 2*maxPeers),
 		txRequests:       make(chan string, 2*maxPeers),
