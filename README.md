@@ -4,9 +4,7 @@ Beancounter
 [![license](http://img.shields.io/badge/license-apache_2.0-blue.svg?style=flat)](https://raw.githubusercontent.com/square/beancounter/master/LICENSE) [![travis](https://img.shields.io/travis/com/square/beancounter.svg?maxAge=3600&logo=travis&label=travis)](https://travis-ci.com/square/beancounter)
 [![coverage](https://coveralls.io/repos/github/square/beancounter/badge.svg?branch=master)](https://coveralls.io/r/square/beancounter) [![report](https://goreportcard.com/badge/github.com/square/beancounter)](https://goreportcard.com/report/github.com/square/beancounter)
 
-Beancounter is a command line utility to audit the balance of Hierarchical Deterministic (HD) wallets at a given point in time (or block height). The tool is designed to scale and work for wallets with a large number of addresses or a large number of transactions.
-
-The tool supports various types of wallets ranging from simple watch wallets to more complicated multisig + segwit.
+Beancounter is a command line utility to audit the balance of [Hierarchical Deterministic (HD)][bip32] wallets at a given point in time (or block height). The tool is designed to scale and work for wallets with a large number of addresses or a large number of transactions, with support ranging from simple watch wallets to more complicated multisig + segwit. If you're curious, [here's why we decided to write Beancounter](WHY.md) in the first place.
 
 Beancounter currently supports two types of backends to query the blockchain:
 1. Electrum public servers. When using these servers, Beancounter behaves in a similar fashion to an Electrum client wallet. The servers are queried for transaction history for specific addresses. Using Electrum servers is easiest but requires trusting public servers to return accurate information. There is also potential privacy exposure.
@@ -14,6 +12,8 @@ Beancounter currently supports two types of backends to query the blockchain:
 2. Private Btcd node. Btcd is a Bitcoin full node which implements transaction indexes. Setting up a Btcd node can take some time (the initial sync takes ~7 days) and requires maintaining the node up-to-date. The benefit is however a higher level of guarantee that the transaction history is accurate.
 
 ![logo](https://raw.githubusercontent.com/square/beancounter/master/coffee.jpg)
+
+[bip32]: https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki
 
 Getting Started
 ===============
