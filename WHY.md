@@ -1,5 +1,5 @@
 # Why we wrote Beancounter
-### _and why is wasn't trivial_
+### _and why it wasn't trivial_
 Intuitively, computing the balance for a Bitcoin wallet should be easy. This document explains the issues we ran into with both, our hot and cold wallets. We solved these issues by implementing Beancounter, a tool we then open-sourced.
 
 # How is the blockchain structured?
