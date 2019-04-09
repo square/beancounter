@@ -20,13 +20,12 @@ Getting Started
 
 Installing
 ----------
-If missing, install [https://github.com/golang/dep](https://github.com/golang/dep)
+Requires Go 1.11 or higher.
 
 ```
 $ git clone https://github.com/square/beancounter/
 $ cd beancounter
-$ dep ensure
-$ go build
+$ go build -mod=vendor
 ```
 
 Deriving the child pubkey
