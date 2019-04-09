@@ -5,13 +5,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/btcsuite/btcd/wire"
 	"log"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/btcsuite/btcd/wire"
+
+	"github.com/Masterminds/semver"
 	"github.com/square/beancounter/backend/electrum"
 	"github.com/square/beancounter/deriver"
 	"github.com/square/beancounter/reporter"
@@ -449,16 +450,22 @@ func (eb *ElectrumBackend) cacheTxs(txs []*electrum.Transaction) {
 	}
 }
 
-// Checks that a string such as "1.2" or "v1.3" is greater than or equal to 1.2
+// Checks that Electrum server's version is 1.2 or higher
 func checkVersion(ver string) error {
 	if ver[0] == 'v' {
 		ver = ver[1:]
 	}
-	f, err := strconv.ParseFloat(ver, 32)
+	v, err := semver.NewVersion(ver)
 	if err != nil {
 		return err
 	}
-	if f < 1.2 {
+
+	c, err := semver.NewConstraint(">= 1.2")
+	if err != nil {
+		return err
+	}
+
+	if !c.Check(v) {
 		return ErrIncompatibleVersion
 	}
 	return nil

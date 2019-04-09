@@ -96,7 +96,7 @@ func TestGetDefaultServer(t *testing.T) {
 
 	host, port = GetDefaultServer(Testnet, Electrum, "")
 	assert.NotEqual(t, "localhost", host)
-	assert.Equal(t, "s50102", port)
+	assert.Equal(t, "s53012", port)
 
 	host, port = GetDefaultServer(Testnet, Btcd, "")
 	assert.Equal(t, "localhost", host)

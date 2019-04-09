@@ -117,7 +117,7 @@ func GetDefaultServer(network Network, backend BackendName, addr string) (string
 		case "mainnet":
 			return "electrum.petrkr.net", "s50002"
 		case "testnet":
-			return "electrum_testnet_unlimited.criptolayer.net", "s50102"
+			return "testnet.hsmiths.com", "s53012"
 		default:
 			panic("unreachable")
 		}
