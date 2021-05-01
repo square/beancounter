@@ -14,7 +14,6 @@ type Reporter struct {
 	addressesFetched   uint32
 	txScheduled        uint32
 	txFetched          uint32
-	txAfterFilter      int32
 	peers              int32
 }
 
@@ -29,8 +28,8 @@ func GetInstance() *Reporter {
 }
 
 func (r *Reporter) Log(msg string) {
-	fmt.Printf("%d/%d %d/%d/%d %d: %s\n", r.GetAddressesScheduled(), r.GetAddressesFetched(),
-		r.GetTxScheduled(), r.GetTxFetched(), r.GetTxAfterFilter(), r.GetPeers(), msg)
+	fmt.Printf("%d/%d %d/%d %d: %s\n", r.GetAddressesScheduled(), r.GetAddressesFetched(),
+		r.GetTxScheduled(), r.GetTxFetched(), r.GetPeers(), msg)
 }
 
 func (r *Reporter) Logf(format string, args ...interface{}) {
@@ -45,20 +44,12 @@ func (r *Reporter) GetAddressesFetched() uint32 {
 	return atomic.LoadUint32(&r.addressesFetched)
 }
 
-func (r *Reporter) SetAddressesFetched(n uint32) {
-	atomic.StoreUint32(&r.addressesFetched, n)
-}
-
 func (r *Reporter) IncAddressesScheduled() {
 	atomic.AddUint32(&r.addressesScheduled, 1)
 }
 
 func (r *Reporter) GetAddressesScheduled() uint32 {
 	return atomic.LoadUint32(&r.addressesScheduled)
-}
-
-func (r *Reporter) SetddressesScheduled(n uint32) {
-	atomic.StoreUint32(&r.addressesScheduled, n)
 }
 
 func (r *Reporter) IncTxFetched() {
@@ -69,36 +60,12 @@ func (r *Reporter) GetTxFetched() uint32 {
 	return atomic.LoadUint32(&r.txFetched)
 }
 
-func (r *Reporter) SetTxFetched(n uint32) {
-	atomic.StoreUint32(&r.txFetched, n)
-}
-
 func (r *Reporter) IncTxScheduled() {
 	atomic.AddUint32(&r.txScheduled, 1)
 }
 
 func (r *Reporter) GetTxScheduled() uint32 {
 	return atomic.LoadUint32(&r.txScheduled)
-}
-
-func (r *Reporter) SetTxScheduled(n uint32) {
-	atomic.StoreUint32(&r.txScheduled, n)
-}
-
-func (r *Reporter) IncTxAfterFilter() {
-	atomic.AddInt32(&r.txAfterFilter, 1)
-}
-
-func (r *Reporter) GetTxAfterFilter() int32 {
-	return atomic.LoadInt32(&r.txAfterFilter)
-}
-
-func (r *Reporter) SetTxAfterFilter(n int32) {
-	atomic.StoreInt32(&r.txAfterFilter, n)
-}
-
-func (r *Reporter) IncPeers() {
-	atomic.AddInt32(&r.peers, 1)
 }
 
 func (r *Reporter) GetPeers() int32 {

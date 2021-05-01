@@ -3,6 +3,7 @@ package backend
 import (
 	"fmt"
 	"log"
+	"math"
 	"sync"
 
 	"github.com/btcsuite/btcd/btcjson"
@@ -80,15 +81,10 @@ func NewBtcdBackend(host, port, user, pass string, network Network) (*BtcdBacken
 		return nil, errors.Errorf("Unexpected genesis block %s != %s", genesis.String(), GenesisBlock(network))
 	}
 
-	height, err := client.GetBlockCount()
-	if err != nil {
-		return nil, errors.Wrap(err, "could not connect to the Btcd server")
-	}
-
-	b := &BtcdBackend{
+	return &BtcdBackend{
 		client:         client,
 		network:        network,
-		chainHeight:    uint32(height),
+		chainHeight:    0,
 		addrRequests:   make(chan *deriver.Address, addrRequestsChanSize),
 		addrResponses:  make(chan *AddrResponse, addrRequestsChanSize),
 		txRequests:     make(chan string, 2*maxTxsPerAddr),
@@ -99,13 +95,26 @@ func NewBtcdBackend(host, port, user, pass string, network Network) (*BtcdBacken
 		blockHeightLookup:  make(map[string]int64),
 		cachedTransactions: make(map[string]*TxResponse),
 		doneCh:             make(chan bool),
+	}, nil
+}
+
+func (b *BtcdBackend) ChainHeight() uint32 {
+	height, err := b.client.GetBlockCount()
+	PanicOnError(err)
+	if height <= 0 || height > math.MaxUint32 {
+		log.Panicf("invalid height: %d", height)
 	}
+	return uint32(height)
+}
+
+func (b *BtcdBackend) Start(blockHeight uint32) error {
+	b.chainHeight = blockHeight
 
 	// launch
 	for i := 0; i < concurrency; i++ {
 		go b.processRequests()
 	}
-	return b, nil
+	return nil
 }
 
 // AddrRequest schedules a request to the backend to lookup information related
@@ -150,10 +159,6 @@ func (b *BtcdBackend) BlockResponses() <-chan *BlockResponse {
 func (b *BtcdBackend) Finish() {
 	close(b.doneCh)
 	b.client.Disconnect()
-}
-
-func (b *BtcdBackend) ChainHeight() uint32 {
-	return b.chainHeight
 }
 
 func (b *BtcdBackend) processRequests() {

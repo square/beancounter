@@ -28,8 +28,13 @@ import (
 // forgo the Finish() method and have the Accounter read from the TxResponses channel until it has
 // all the data it needs. This would require the Accounter to maintain its own set of transactions.
 type Backend interface {
+	// Returns chain height. Possibly connects + disconnects from first node.
 	ChainHeight() uint32
 
+	// Gets backend ready to serve requests
+	Start(blockHeight uint32) error
+
+	// Request-response channels
 	AddrRequest(addr *deriver.Address)
 	AddrResponses() <-chan *AddrResponse
 	TxRequest(txHash string)
@@ -37,6 +42,7 @@ type Backend interface {
 	BlockRequest(height uint32)
 	BlockResponses() <-chan *BlockResponse
 
+	// Call this to disconnect from nodes and cleanup
 	Finish()
 }
 

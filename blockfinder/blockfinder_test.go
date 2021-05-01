@@ -10,6 +10,7 @@ import (
 func TestFindBLock(t *testing.T) {
 	b, err := backend.NewFixtureBackend("../fixtures/blocks.json")
 	assert.NoError(t, err)
+	b.Start(546110)
 
 	bf := New(b)
 	height, median, timestamp := bf.Search(time.Unix(1533153600, 0))

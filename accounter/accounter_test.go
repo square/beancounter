@@ -94,6 +94,7 @@ func TestComputeBalanceTestnet(t *testing.T) {
 	deriver := deriver.NewAddressDeriver(Testnet, pubs, 1, "")
 	b, err := backend.NewFixtureBackend("testdata/tpub_data.json")
 	assert.NoError(t, err)
+	b.Start(1435169)
 	a := New(b, deriver, 100, 1435169)
 
 	assert.Equal(t, uint64(267893477), a.ComputeBalance())

@@ -3,6 +3,7 @@ package backend
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/square/beancounter/utils"
 	"os"
 	"sort"
 	"sync"
@@ -40,7 +41,7 @@ type RecorderBackend struct {
 // RecorderBackend passes requests to another backend and ten records
 // address and transaction responses to a file. The file can later be used by a
 // FixtureBackend to reply those responses.
-func NewRecorderBackend(b Backend, filepath string) (*RecorderBackend, error) {
+func NewRecorderBackend(b Backend, filepath string) *RecorderBackend {
 	rb := &RecorderBackend{
 		backend:        b,
 		addrResponses:  make(chan *AddrResponse, addrRequestsChanSize),
@@ -52,9 +53,18 @@ func NewRecorderBackend(b Backend, filepath string) (*RecorderBackend, error) {
 		doneCh:         make(chan bool),
 		outputFilepath: filepath,
 	}
+	return rb
+}
 
+func (rb *RecorderBackend) ChainHeight() uint32 {
+	return rb.backend.ChainHeight()
+}
+
+func (rb *RecorderBackend) Start(blockHeight uint32) error {
+	err := rb.backend.Start(blockHeight)
+	utils.PanicOnError(err)
 	go rb.processRequests()
-	return rb, nil
+	return nil
 }
 
 // AddrRequest schedules a request to the backend to lookup information related
@@ -99,10 +109,6 @@ func (rb *RecorderBackend) Finish() {
 	if err := rb.writeToFile(); err != nil {
 		fmt.Println(err)
 	}
-}
-
-func (rb *RecorderBackend) ChainHeight() uint32 {
-	return rb.backend.ChainHeight()
 }
 
 func (rb *RecorderBackend) processRequests() {

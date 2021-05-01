@@ -45,7 +45,7 @@ type FixtureBackend struct {
 
 // NewFixtureBackend returns a new FixtureBackend structs or errors.
 func NewFixtureBackend(filepath string) (*FixtureBackend, error) {
-	cb := &FixtureBackend{
+	fb := &FixtureBackend{
 		addrRequests:   make(chan *deriver.Address, 10),
 		addrResponses:  make(chan *AddrResponse, 10),
 		txRequests:     make(chan string, 1000),
@@ -65,12 +65,23 @@ func NewFixtureBackend(filepath string) (*FixtureBackend, error) {
 	}
 	defer f.Close()
 
-	if err := cb.loadFromFile(f); err != nil {
+	if err := fb.loadFromFile(f); err != nil {
 		return nil, pkgerr.Wrap(err, "cannot load data from a fixture file")
 	}
 
-	go cb.processRequests()
-	return cb, nil
+	return fb, nil
+}
+
+func (fb *FixtureBackend) ChainHeight() uint32 {
+	return fb.height
+}
+
+func (fb *FixtureBackend) Start(blockHeight uint32) error {
+	if fb.height < blockHeight {
+		log.Panicf("recorded height %d < %d", fb.height, blockHeight)
+	}
+	go fb.processRequests()
+	return nil
 }
 
 // AddrRequest schedules a request to the backend to lookup information related
@@ -114,10 +125,6 @@ func (fb *FixtureBackend) BlockResponses() <-chan *BlockResponse {
 // Finish informs the backend to stop doing its work.
 func (fb *FixtureBackend) Finish() {
 	close(fb.doneCh)
-}
-
-func (fb *FixtureBackend) ChainHeight() uint32 {
-	return fb.height
 }
 
 func (fb *FixtureBackend) processRequests() {

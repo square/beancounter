@@ -67,7 +67,7 @@ func AddressToNetwork(addr string) Network {
 	case 'n':
 		return Testnet // pubkey hash
 	case '2':
-		return Testnet //script hash
+		return Testnet // script hash
 	case '1':
 		return Mainnet // pubkey hash
 	case '3':
