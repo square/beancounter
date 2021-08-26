@@ -5,18 +5,6 @@ language: go
 go:
   - '1.13.4'
 
-deploy:
-  provider: releases
-  api_key:
-    secure: NwXpCazoaT3vj3kaLgetA7fnZkgmwperDwuoU+nLCdBHPHFbGiXZsgP3a3hdbnAXTMmcyg3wXiUcjByurfg/3AOtMvK5pV18kIwRh/FdDkvkqpxsxcXdRuELesdPzM2jNejXwgDmoLJ31QEHAGqOLBQiCpNqKpkrz6U2dk08QIMTOGbTp3k+B6XiTXqr0Xz/DEVfwxf4ZgWLY3S1ne0vcfOExpJCraaW6nymNzubg4rUrZWVHcAZBznqq1xx0Ye6Xa4Kx/iU6VvpW0rzLUlMMdAC4wiVwVwDuT/QWQyOZV1a6mEynZLmEv5zaCWRNxemUbe4+O34G8ah6getFUtmTwZS4eR/WXYwHyx6JT4MsOP0/sXaj++ZyQxfsT9j3/3ycL2KDbsChF9igLmyEyfeYaMf7/wRNyc0Uxy/c3J6ILuHeZ3zAghGQct8eVeMuK+FRfkckAF2X9VN03j6ywvQKuCo1nBKSSO9iER3X81MWaNTtCAavOZ0F0/LnFelw6WySo16tDOgBCgcWO+SV0I27iS34i2isw+HdypuXM2Xu5YXya5iw5tFkqSEF/5cHQd6QI3Y3p5Sa/LRJrU7GAdZ7kA7efsrz/pDAvDgqA6aVmoaw+hhxQGWu5EXmA15I4shK80UcU4isR4rB/3R0y/zoiv/OCPVD9+9qnyRqZsYY+c=
-  file:
-    - beancounter-${TRAVIS_TAG}-linux-amd64
-    - beancounter-${TRAVIS_TAG}-osx-amd64
-    - beancounter-${TRAVIS_TAG}-windows-amd64.exe
-  skip_cleanup: true
-  on:
-    tags: true
-
 before_install:
   - go get github.com/mattn/goveralls
 
