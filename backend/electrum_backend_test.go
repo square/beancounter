@@ -2,28 +2,13 @@ package backend
 
 import (
 	"github.com/square/beancounter/backend/electrum"
-	"github.com/square/beancounter/deriver"
 	. "github.com/square/beancounter/utils"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
 func TestTransactionCache(t *testing.T) {
-	// TODO: refactor ElectrumBackend to make it easier to test
-
-	eb := &ElectrumBackend{
-		nodes:            make(map[string]*electrum.Node),
-		blacklistedNodes: make(map[string]struct{}),
-		network:          Testnet,
-		addrRequests:     make(chan *deriver.Address, 2*maxPeers),
-		addrResponses:    make(chan *AddrResponse, 2*maxPeers),
-		txRequests:       make(chan string, 2*maxPeers),
-		txResponses:      make(chan *TxResponse, 2*maxPeers),
-
-		peersRequests: make(chan struct{}),
-		transactions:  make(map[string]int64),
-		doneCh:        make(chan bool),
-	}
+	eb := NewElectrumBackend("foobar", "1234", Testnet)
 
 	tx1 := electrum.Transaction{Hash: "aaaaaa", Height: 100}
 	tx2 := electrum.Transaction{Hash: "bbbbbb", Height: 100}

@@ -2,7 +2,6 @@ package accounter
 
 import (
 	"encoding/hex"
-	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -28,8 +27,10 @@ type Accounter struct {
 	xpubs       []string
 	blockHeight uint32 // height at which we want to compute the balance
 
-	addresses    map[string]address     // map of address script => (Address, txHashes)
-	transactions map[string]transaction // map of txhash => transaction
+	addresses     map[string]address // map of address script => (Address, txHashes)
+	txAddressesMu sync.Mutex
+	txAddresses   map[string][]*deriver.Address // map of txhash => []Address
+	transactions  map[string]transaction        // map of txhash => transaction
 
 	backend   backend.Backend
 	deriver   *deriver.AddressDeriver
@@ -71,20 +72,19 @@ type vout struct {
 }
 
 // New instantiates a new Accounter.
-// TODO: find a better way to pass options to the NewCounter. Maybe thru a config or functional option params?
 func New(b backend.Backend, addressDeriver *deriver.AddressDeriver, lookahead uint32, blockHeight uint32) *Accounter {
-	a := &Accounter{
+	return &Accounter{
 		blockHeight:   blockHeight,
 		backend:       b,
 		deriver:       addressDeriver,
 		lookahead:     lookahead,
 		lastAddresses: [2]uint32{lookahead, lookahead},
+		addresses:     make(map[string]address),
+		txAddresses:   make(map[string][]*deriver.Address),
+		transactions:  make(map[string]transaction),
+		addrResponses: b.AddrResponses(),
+		txResponses:   b.TxResponses(),
 	}
-	a.addresses = make(map[string]address)
-	a.transactions = make(map[string]transaction)
-	a.addrResponses = b.AddrResponses()
-	a.txResponses = b.TxResponses()
-	return a
 }
 
 func (a *Accounter) ComputeBalance() uint64 {
@@ -114,31 +114,25 @@ func (a *Accounter) fetchTransactions() {
 func (a *Accounter) processTransactions() {
 	for hash, tx := range a.transactions {
 		// remove transactions which are too recent
-		if tx.height > int64(a.blockHeight) {
-			reporter.GetInstance().Logf("transaction %s has height %d > BLOCK HEIGHT (%d)", hash, tx.height, a.blockHeight)
+		if (tx.height > int64(a.blockHeight)) || (tx.height == 0) {
+			log.Printf("backend failed to filter tx %s (%d, %d)", hash, tx.height, a.blockHeight)
 			delete(a.transactions, hash)
 		}
-		// remove transactions which haven't been mined
-		if tx.height <= 0 {
-			reporter.GetInstance().Logf("transaction %s has not been mined, yet (height=%d)", hash, tx.height)
-			delete(a.transactions, hash)
+		if tx.height < 0 {
+			log.Panicf("tx %s has negative height %d", hash, tx.height)
 		}
 	}
-	reporter.GetInstance().SetTxAfterFilter(int32(len(a.transactions)))
-	reporter.GetInstance().Log("done filtering")
 
 	// TODO: we could check that scheduled == fetched in the metrics we track in reporter.
-
 	// parse the transaction hex
 	for hash, tx := range a.transactions {
 		b, err := hex.DecodeString(tx.hex)
 		if err != nil {
-			fmt.Printf("failed to unhex transaction %s: %s", hash, tx.hex)
+			log.Panicf("failed to unhex transaction %s: %s", hash, tx.hex)
 		}
 		parsedTx, err := btcutil.NewTxFromBytes(b)
 		if err != nil {
-			fmt.Printf("failed to parse transaction %s: %s", hash, tx.hex)
-			continue
+			log.Panicf("failed to parse transaction %s: %s", hash, tx.hex)
 		}
 		for _, txin := range parsedTx.MsgTx().TxIn {
 			tx.vin = append(tx.vin, vin{
@@ -234,7 +228,10 @@ func (a *Accounter) sendWork() {
 				indexes[change]++
 			}
 		}
-		// apparently no more work for us, so we can sleep a bit
+		// apparently no more work for now.
+
+		// TODO: we should either merge sendWork/recvWork or use some kind of mutex to sleep exactly
+		// until there's more work that needs to be done. For now, a simple sleep works.
 		time.Sleep(time.Millisecond * 100)
 	}
 }
@@ -251,6 +248,7 @@ func (a *Accounter) recvWork() {
 				continue
 			}
 			reporter.GetInstance().IncAddressesFetched()
+			reporter.GetInstance().Logf("received address: %s", resp.Address)
 
 			a.countMu.Lock()
 			a.processedAddrCount++
@@ -263,6 +261,7 @@ func (a *Accounter) recvWork() {
 
 			a.countMu.Lock()
 			for _, txHash := range resp.TxHashes {
+				// TODO: mark this txHash as having been scheduled. So we don't fetch it multiple times.
 				if _, exists := a.transactions[txHash]; !exists {
 					a.backend.TxRequest(txHash)
 					a.seenTxCount++
@@ -270,13 +269,15 @@ func (a *Accounter) recvWork() {
 			}
 			a.countMu.Unlock()
 
+			// we can only update the lastAddresses after we filter the transaction heights
+			a.txAddressesMu.Lock()
+			for _, txHash := range resp.TxHashes {
+				a.txAddresses[txHash] = append(a.txAddresses[txHash], resp.Address)
+			}
+			a.txAddressesMu.Unlock()
+
 			reporter.GetInstance().Logf("address %s has %d transactions", resp.Address, len(resp.TxHashes))
 
-			if resp.HasTransactions() {
-				a.countMu.Lock()
-				a.lastAddresses[resp.Address.Change()] = Max(a.lastAddresses[resp.Address.Change()], resp.Address.Index()+a.lookahead)
-				a.countMu.Unlock()
-			}
 		case resp, ok := <-txResponses:
 			// channel is closed now, so ignore this case by blocking forever
 			if !ok {
@@ -285,6 +286,7 @@ func (a *Accounter) recvWork() {
 			}
 
 			reporter.GetInstance().IncTxFetched()
+			reporter.GetInstance().Logf("received tx: %s", resp.Hash)
 
 			a.countMu.Lock()
 			a.processedTxCount++
@@ -297,6 +299,15 @@ func (a *Accounter) recvWork() {
 				vout:   []vout{},
 			}
 			a.transactions[resp.Hash] = tx
+
+			a.txAddressesMu.Lock()
+			a.countMu.Lock()
+			for _, addr := range a.txAddresses[resp.Hash] {
+				a.lastAddresses[addr.Change()] = Max(a.lastAddresses[addr.Change()], addr.Index()+a.lookahead)
+			}
+			a.countMu.Unlock()
+			a.txAddressesMu.Unlock()
+
 		case <-time.Tick(1 * time.Second):
 			if a.complete() {
 				return
