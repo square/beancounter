@@ -1,4 +1,4 @@
-# github.com/Masterminds/semver v1.4.2
+# github.com/Masterminds/semver v1.5.0
 github.com/Masterminds/semver
 # github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc
 github.com/alecthomas/template
@@ -14,33 +14,35 @@ github.com/bcext/gcash/chaincfg
 github.com/bcext/gcash/chaincfg/chainhash
 github.com/bcext/gcash/wire
 # github.com/btcsuite/btcd v0.0.0-20180924021209-2a560b2036be
+github.com/btcsuite/btcd/btcec
 github.com/btcsuite/btcd/btcjson
+github.com/btcsuite/btcd/chaincfg
 github.com/btcsuite/btcd/chaincfg/chainhash
 github.com/btcsuite/btcd/rpcclient
-github.com/btcsuite/btcd/wire
 github.com/btcsuite/btcd/txscript
-github.com/btcsuite/btcd/chaincfg
-github.com/btcsuite/btcd/btcec
+github.com/btcsuite/btcd/wire
 # github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f
 github.com/btcsuite/btclog
 # github.com/btcsuite/btcutil v0.0.0-20180706230648-ab6388e0c60a
-github.com/btcsuite/btcutil/hdkeychain
 github.com/btcsuite/btcutil
 github.com/btcsuite/btcutil/base58
 github.com/btcsuite/btcutil/bech32
+github.com/btcsuite/btcutil/hdkeychain
 # github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd
 github.com/btcsuite/go-socks/socks
 # github.com/btcsuite/websocket v0.0.0-20150119174127-31079b680792
 github.com/btcsuite/websocket
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
-# github.com/pkg/errors v0.8.0
+# github.com/pkg/errors v0.9.1
 github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
 github.com/pmezard/go-difflib/difflib
-# github.com/stretchr/testify v1.2.2
+# github.com/stretchr/testify v1.8.0
 github.com/stretchr/testify/assert
 # golang.org/x/crypto v0.0.0-20181001203147-e3636079e1a4
 golang.org/x/crypto/ripemd160
 # gopkg.in/alecthomas/kingpin.v2 v2.2.6
 gopkg.in/alecthomas/kingpin.v2
+# gopkg.in/yaml.v3 v3.0.1
+gopkg.in/yaml.v3
